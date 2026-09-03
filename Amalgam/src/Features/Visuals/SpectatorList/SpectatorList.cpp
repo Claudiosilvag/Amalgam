@@ -1,7 +1,10 @@
 #include "SpectatorList.h"
 
+#include "../../ImGui/IndicatorPanel.h"
 #include "../../Players/PlayerUtils.h"
 #include "../../Spectate/Spectate.h"
+
+static float s_flCurrentHeight = 0.0f;
 
 bool CSpectatorList::GetSpectators(CTFPlayer* pTarget)
 {
@@ -82,59 +85,100 @@ void CSpectatorList::Draw(CTFPlayer* pLocal)
 	if (!(Vars::Menu::Indicators.Value & Vars::Menu::IndicatorsEnum::Spectators))
 	{
 		m_mRespawnCache.clear();
+		s_flCurrentHeight = 0.0f;
 		return;
 	}
 
-	auto pTarget = pLocal;
-	switch (pLocal->m_iObserverMode())
+	if (pLocal)
 	{
-	case OBS_MODE_FIRSTPERSON:
-	case OBS_MODE_THIRDPERSON:
-		pTarget = pLocal->m_hObserverTarget()->As<CTFPlayer>();
+		auto pTarget = pLocal;
+		switch (pLocal->m_iObserverMode())
+		{
+		case OBS_MODE_FIRSTPERSON:
+		case OBS_MODE_THIRDPERSON:
+			pTarget = pLocal->m_hObserverTarget()->As<CTFPlayer>();
+		}
+		if (!pTarget || !pTarget->IsPlayer()
+			|| !GetSpectators(pTarget))
+			return;
 	}
-	if (!pTarget || !pTarget->IsPlayer()
-		|| !GetSpectators(pTarget))
+
+	if (m_vSpectators.empty())
 		return;
 
 	int x = Vars::Menu::SpectatorsDisplay.Value.x;
-	int y = Vars::Menu::SpectatorsDisplay.Value.y + 8;
-	int iconOffset = 0;
+	int y = Vars::Menu::SpectatorsDisplay.Value.y;
 	const auto& fFont = H::Fonts.GetFont(FONT_INDICATORS);
 	const int nTall = fFont.m_nTall + H::Draw.Scale(3);
+	ImDrawList* pDrawList = ImGui::GetBackgroundDrawList();
 
-	EAlign align = ALIGN_TOP;
-	if (x <= 100 + H::Draw.Scale(50, Scale_Round))
+	float flMaxTextWidth = 0.f;
+	for (auto& Spectator : m_vSpectators)
 	{
-		x -= H::Draw.Scale(42, Scale_Round);
-		align = ALIGN_TOPLEFT;
-	}
-	else if (x >= H::Draw.m_nScreenW - 100 + H::Draw.Scale(50, Scale_Round))
-	{
-		x += H::Draw.Scale(42, Scale_Round);
-		align = ALIGN_TOPRIGHT;
+		const std::string sText = std::format("{} ({} - respawn {}s)", Spectator.m_sName, Spectator.m_sMode, static_cast<int>(Spectator.m_flRespawnIn));
+		flMaxTextWidth = std::max(flMaxTextWidth, ImGui::CalcTextSize(sText.c_str()).x);
 	}
 
-	auto pResource = H::Entities.GetResource();
-	int iIndex = pTarget->entindex();
-	const char* sName = pTarget != pLocal ? F::PlayerUtils.GetPlayerName(iIndex, pResource->GetName(iIndex)) : "You";
-	H::Draw.StringOutlined(fFont, x, y, Vars::Menu::Theme::Accent.Value, Vars::Menu::Theme::Background.Value, align, std::format("Spectating {}:", sName).c_str());
-	for (auto& tSpectator : m_vSpectators)
-	{
-		y += nTall;
+	int totalHeight = H::Draw.Scale(48);
+	totalHeight += static_cast<int>(m_vSpectators.size()) * nTall;
+	totalHeight += H::Draw.Scale(4); 
 
-		Color_t tColor = Vars::Menu::Theme::Active.Value;
-		if (H::Entities.IsFriend(tSpectator.m_iIndex))
+	s_flCurrentHeight = std::lerp(s_flCurrentHeight, static_cast<float>(totalHeight), I::GlobalVars->frametime * 10.0f);
+	totalHeight = static_cast<int>(std::round(s_flCurrentHeight));
+
+	const int boxWidth = std::max(H::Draw.Scale(220), static_cast<int>(flMaxTextWidth) + H::Draw.Scale(40)); 
+	const int cornerRadius = H::Draw.Scale(2); 
+	
+	Color_t tBackgroundColor = Vars::Menu::Theme::Background.Value;
+	tBackgroundColor = tBackgroundColor.Lerp({ 127, 127, 127, tBackgroundColor.a }, 1.f / 9);
+	tBackgroundColor.a = 255;
+	
+	Color_t tAccentColor = Vars::Menu::Theme::Accent.Value;
+	Color_t tActiveColor = Vars::Menu::Theme::Active.Value;
+
+	const float flX = static_cast<float>(x);
+	float flY = static_cast<float>(y);
+	pDrawList->AddRectFilled({ flX, flY }, { flX + boxWidth, flY + totalHeight }, ColorToU32(tBackgroundColor), static_cast<float>(cornerRadius));
+
+	const float headerHeight = H::Draw.Scale(24);
+	Color_t tHeaderBgColor = tBackgroundColor;
+	tHeaderBgColor = { 
+		static_cast<byte>(tBackgroundColor.r * 0.9f), 
+		static_cast<byte>(tBackgroundColor.g * 0.9f), 
+		static_cast<byte>(tBackgroundColor.b * 0.9f), 
+		tBackgroundColor.a 
+	};
+	
+	pDrawList->AddRectFilled({ flX, flY }, { flX + boxWidth, flY + headerHeight }, ColorToU32(tHeaderBgColor), static_cast<float>(cornerRadius));
+	DrawIndicatorText(pDrawList, flX + H::Draw.Scale(16), flY + H::Draw.Scale(5), tActiveColor, Vars::Menu::Theme::Background.Value, ALIGN_TOPLEFT, "Spec");
+	const float flSpecWidth = ImGui::CalcTextSize("Spec").x;
+	DrawIndicatorText(pDrawList, flX + H::Draw.Scale(16) + flSpecWidth, flY + H::Draw.Scale(5), tAccentColor, Vars::Menu::Theme::Background.Value, ALIGN_TOPLEFT, "tators");
+
+	flY += H::Draw.Scale(32);
+	for (auto& Spectator : m_vSpectators)
+	{
+		Color_t tColor = tActiveColor;
+		if (Spectator.m_bIsFriend)
 			tColor = F::PlayerUtils.m_vTags[F::PlayerUtils.TagToIndex(FRIEND_TAG)].m_tColor;
-		else if (H::Entities.InParty(tSpectator.m_iIndex))
+		else if (Spectator.m_bInParty)
 			tColor = F::PlayerUtils.m_vTags[F::PlayerUtils.TagToIndex(PARTY_TAG)].m_tColor;
-		else if (tSpectator.m_bRespawnTimeIncreased)
+		else if (Spectator.m_bRespawnTimeIncreased)
 			tColor = F::PlayerUtils.m_vTags[F::PlayerUtils.TagToIndex(CHEATER_TAG)].m_tColor;
-		else if (FNV1A::Hash32(tSpectator.m_sMode) == FNV1A::Hash32Const("1st"))
+		else if (FNV1A::Hash32(Spectator.m_sMode) == FNV1A::Hash32Const("1st"))
 			tColor = tColor.Lerp({ 255, 150, 0, 255 }, 0.5f);
 
-		if (tSpectator.m_flRespawnIn != -1.f)
-			H::Draw.StringOutlined(fFont, x + iconOffset, y, tColor, Vars::Menu::Theme::Background.Value, align, std::format("{} ({} - respawn {}s)", tSpectator.m_sName, tSpectator.m_sMode, tSpectator.m_flRespawnIn).c_str());
-		else
-			H::Draw.StringOutlined(fFont, x + iconOffset, y, tColor, Vars::Menu::Theme::Background.Value, align, std::format("{} ({})", tSpectator.m_sName, tSpectator.m_sMode).c_str());
+		if (Spectator.m_bRespawnTimeIncreased || FNV1A::Hash32(Spectator.m_sMode) == FNV1A::Hash32Const("1st"))
+		{
+			Color_t tHighlightColor = tBackgroundColor;
+			tHighlightColor = tHighlightColor.Lerp({ 255, 255, 255, tBackgroundColor.a }, 0.05f);
+			pDrawList->AddRectFilled(
+				{ flX + H::Draw.Scale(12), flY - H::Draw.Scale(2) },
+				{ flX + boxWidth - H::Draw.Scale(12), flY - H::Draw.Scale(2) + nTall },
+				ColorToU32(tHighlightColor),
+				H::Draw.Scale(2.f));
+		}
+
+		DrawIndicatorText(pDrawList, flX + H::Draw.Scale(16), flY, tColor, Vars::Menu::Theme::Background.Value, ALIGN_TOPLEFT, std::format("{} ({} - respawn {}s)", Spectator.m_sName.c_str(), Spectator.m_sMode, static_cast<int>(Spectator.m_flRespawnIn)));
+		flY += nTall;
 	}
 }

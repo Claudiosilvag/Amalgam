@@ -2,7 +2,6 @@
 #include "../Memory/Memory.h"
 #include "../../Core/Core.h"
 #include "../../SDK/Definitions/Interfaces.h"
-#include <TlHelp32.h>
 #include <string>
 #include <format>
 #include <boost/algorithm/string/split.hpp>

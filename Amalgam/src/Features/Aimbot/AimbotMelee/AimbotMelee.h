@@ -28,8 +28,12 @@ private:
 	std::unordered_map<int, std::deque<TickRecord>> m_mRecordMap;
 	std::unordered_map<int, std::vector<Vec3>> m_mPaths;
 
+	std::pair<float, float> GetClosestRecord(std::vector<TickRecord*> vRecords);
+
 public:
 	void Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd);
+
+	void BacktrackToCrosshair(CTFPlayer* pLocal, CUserCmd* pCmd);
 };
 
 ADD_FEATURE(CAimbotMelee, AimbotMelee);

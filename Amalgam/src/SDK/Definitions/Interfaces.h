@@ -43,11 +43,17 @@
 #include "Interfaces/SteamInterfaces.h"
 #include "Interfaces/ViewRenderBeams.h"
 #include "Interfaces/VPhysics.h"
+#include "Interfaces/CServerTools.h"
+#include "Interfaces/CTFInventoryManager.h"
+#include "Interfaces/CModelLoader.h"
+#include "Interfaces/IDemoPlayer.h"
+#include "Interfaces/IDemoRecorder.h"
 #include "Interfaces/WorldBrushData.h"
 
+#ifndef TEXTMODE
 #include <d3d9.h>
 MAKE_INTERFACE_SIGNATURE(IDirect3DDevice9, DirectXDevice, "shaderapidx9.dll, shaderapivk.dll", "48 8B 0D ? ? ? ? 48 8B 01 FF 50 ? 8B F8", 0x0, 1)
-
+#endif
 class CNullInterfaces
 {
 private:

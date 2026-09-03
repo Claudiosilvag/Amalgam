@@ -135,7 +135,6 @@ namespace SDK
 	float MaxSpeed(CTFPlayer* pPlayer, bool bIncludeCrouch = false, bool bIgnoreSpecialAbility = false);
 
 	EWeaponType GetWeaponType(CTFWeaponBase* pWeapon, EWeaponType* pSecondaryType = nullptr);
-	void CanAttack(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, const CUserCmd* pCmd, bool& bPrimary, bool& bSecondary, bool& bReloading);
 	int IsAttacking(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, const CUserCmd* pCmd, bool bTickBase = false);
 
 	void FixMovement(CUserCmd* pCmd, const Vec3& vCurAngle, const Vec3& vTargetAngle);
@@ -144,9 +143,20 @@ namespace SDK
 
 	Vec3 ComputeMove(const CUserCmd* pCmd, CTFPlayer* pLocal, const Vec3& vFrom, const Vec3& vTo);
 	void WalkTo(CUserCmd* pCmd, CTFPlayer* pLocal, const Vec3& vFrom, const Vec3& vTo, float flScale = 1.f);
-	void WalkTo(CUserCmd* pCmd, CTFPlayer* pLocal, const Vec3& vTo, float flScale = 1.f);
+	void WalkTo(CUserCmd* pCmd, CTFPlayer* pLocal, Vec3 vTo, float flScale = 1.f);
 
 	void GetProjectileFireSetup(CTFPlayer* pPlayer, const Vec3& vAngIn, Vec3 vOffset, Vec3& vPosOut, Vec3& vAngOut, float flForward = 0.f, float flCutoff = 0.1f, bool bInterp = false, bool bAllowFlip = true);
 
+	float CalculateSplashRadiusDamageFalloff(CTFWeaponBase* pWeapon, CTFPlayer* pAttacker, CTFWeaponBaseGrenadeProj* pProjectile, float flRadius);
+	float CalculateSplashRadiusDamage(CTFWeaponBase* pWeapon, CTFPlayer* pAttacker, CTFWeaponBaseGrenadeProj* pProjectile, float flRadius, float flDist, float& flDamageNoBuffs, bool bSelf = false);
+	bool WeaponDoesNotUseAmmo(int iWeaponID, int iDefIdx, bool bIncludeInfiniteAmmo = true);
+	bool WeaponDoesNotUseAmmo(CTFWeaponBase* pWeapon, bool bIncludeInfiniteAmmo = true);
+	int GetWeaponMaxReserveAmmo(int iWeaponID, int iDefIdx);
+	std::string GetLevelName();
+	bool BuildTriggerGeometry(TriggerData_t& tTrigger);
+	bool RefreshTriggerStorage(bool bForce = false);
+	int GetPasstimeGoalMapTeam(const Vec3& vOrigin, std::string* pTargetname = nullptr);
+
 	bool CleanScreenshot();
+	void CanAttack(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, const CUserCmd* pCmd, bool& bPrimary, bool& bSecondary, bool& bReloading);
 }

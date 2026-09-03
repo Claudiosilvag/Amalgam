@@ -1,3 +1,4 @@
+#ifndef TEXTMODE
 #include "../SDK/SDK.h"
 
 MAKE_SIGNATURE(CTFPlayerShared_IsPlayerDominated, "client.dll", "48 89 5C 24 ? 48 89 74 24 ? 57 48 83 EC ? 48 63 F2 48 8B D9 E8", 0x0);
@@ -53,3 +54,4 @@ MAKE_HOOK(CClientScoreBoardDialog_NeedsUpdate, S::CClientScoreBoardDialog_NeedsU
 
 	return CALL_ORIGINAL(rcx);
 }
+#endif

@@ -2,15 +2,17 @@
 
 #include "../PacketManip/FakeLag/FakeLag.h"
 #include "../Ticks/Ticks.h"
+#include "../Aimbot/Aimbot.h"
 #include "../AntiCheatCompatibility/AntiCheatCompatibility.h"
+#include "../ImGui/IndicatorPanel.h"
 
 void CBacktrack::Reset()
 {
 	m_mRecords.clear();
 	m_dSequences.clear();
 	m_iLastInSequence = 0;
+	memset(m_tRecord.m_aBones, 0, sizeof(m_tRecord.m_aBones));
 }
-
 
 
 float CBacktrack::GetReal(int iFlow, bool bNoFake)
@@ -60,12 +62,12 @@ int CBacktrack::GetAnticipatedChoke(int iMethod)
 	int iAnticipatedChoke = 0;
 	if (F::Ticks.CanChoke() && G::PrimaryWeaponType != EWeaponType::HITSCAN && Vars::Aimbot::General::AimType.Value == Vars::Aimbot::General::AimTypeEnum::Silent)
 		iAnticipatedChoke = 1;
-	if (F::FakeLag.m_iGoal && !Vars::Fakelag::UnchokeOnAttack.Value && F::Ticks.m_iShiftedTicks == F::Ticks.m_iShiftedGoal && !F::Ticks.m_bDoubletap && !F::Ticks.m_bSpeedhack)
+	if (F::FakeLag.m_iGoal && !Vars::Fakelag::UnchokeOnAttack.Value && F::Ticks.m_iShiftedTicks == F::Ticks.m_iShiftedGoal && !F::Ticks.m_bDoubletap)
 		iAnticipatedChoke = F::FakeLag.m_iGoal - I::ClientState->chokedcommands; // iffy, unsure if there is a good way to get it to work well without unchoking
 	return iAnticipatedChoke;
 }
 
-void CBacktrack::CreateMove(CUserCmd* pCmd)
+void CBacktrack::CreateMove(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd)
 {
 	if (F::AntiCheatCompatibility.Active())
 		return;
@@ -211,43 +213,41 @@ matrix3x4* CBacktrack::GetBones(CBaseEntity* pEntity)
 	return nullptr;
 }
 
-
+static matrix3x4 s_aBones[MAXSTUDIOBONES];
 
 void CBacktrack::MakeRecords()
 {
 	for (auto& pEntity : H::Entities.GetGroup(EntityEnum::PlayerAll))
 	{
 		auto pPlayer = pEntity->As<CTFPlayer>();
-		if (pPlayer->entindex() == I::EngineClient->GetLocalPlayer() || !pPlayer->IsAlive() || pPlayer->IsAGhost()
-			|| !H::Entities.GetDeltaTime(pPlayer->entindex()))
+		if (pPlayer->entindex() == I::EngineClient->GetLocalPlayer() ||
+			pPlayer->IsDormant() || !pPlayer->IsAlive() || pPlayer->IsAGhost() ||
+			!H::Entities.GetDeltaTime(pPlayer->entindex()))
+			continue;
+
+		m_bSettingUpBones = true;
+		bool bSetup = pPlayer->SetupBones(s_aBones, MAXSTUDIOBONES, BONE_USED_BY_ANYTHING, pPlayer->m_flSimulationTime());
+		m_bSettingUpBones = false;
+		if (!bSetup)
 			continue;
 
 		auto& vRecords = m_mRecords[pPlayer];
-
-		TickRecord* pLastRecord = !vRecords.empty() ? &vRecords.front() : nullptr;
-		vRecords.emplace_front(
+		TickRecord tCurRecord = {
 			pPlayer->m_flSimulationTime(),
 			pPlayer->m_vecOrigin(),
 			pPlayer->m_vecMins(),
 			pPlayer->m_vecMaxs(),
 			m_mDidShoot[pPlayer->entindex()]
-		);
-		TickRecord& tCurRecord = vRecords.front();
-
-		m_bSettingUpBones = true;
-		bool bSetup = pPlayer->SetupBones(tCurRecord.m_aBones, MAXSTUDIOBONES, BONE_USED_BY_ANYTHING, tCurRecord.m_flSimTime);
-		m_bSettingUpBones = false;
-		if (!bSetup)
-		{
-			vRecords.pop_front();
-			continue;
-		}
+		};
+		memcpy(tCurRecord.m_aBones, s_aBones, sizeof(tCurRecord.m_aBones));
+		TickRecord* pLastRecord = !vRecords.empty() ? &vRecords.front() : nullptr;
+		vRecords.emplace_front(tCurRecord);
 
 		bool bLagComp = false;
 		if (pLastRecord)
 		{
 			const Vec3 vDelta = tCurRecord.m_vOrigin - pLastRecord->m_vOrigin;
-			
+
 			static auto sv_lagcompensation_teleport_dist = H::ConVars.FindVar("sv_lagcompensation_teleport_dist");
 			const float flDist = powf(sv_lagcompensation_teleport_dist->GetFloat(), 2.f);
 			if (vDelta.Length2DSqr() > flDist)
@@ -321,7 +321,7 @@ void CBacktrack::Store()
 
 	static auto sv_maxunlag = H::ConVars.FindVar("sv_maxunlag");
 	m_flMaxUnlag = sv_maxunlag->GetFloat();
-	
+
 	MakeRecords();
 	CleanRecords();
 }
@@ -404,30 +404,60 @@ void CBacktrack::RestorePing(CNetChannel* pNetChan)
 
 void CBacktrack::Draw(CTFPlayer* pLocal)
 {
-	if (!(Vars::Menu::Indicators.Value & Vars::Menu::IndicatorsEnum::Ping) || !pLocal->IsAlive())
-		return;
+	static std::string sPingText = {};
+	static std::string sScoreboardText = {};
+	static bool bCachedValid = false;
 
-	auto pResource = H::Entities.GetResource();
-	auto pNetChan = I::EngineClient->GetNetChannelInfo();
-	if (!pResource || !pNetChan)
-		return;
-
-	static float flFakeLatency = 0.f;
+	if (!(Vars::Menu::Indicators.Value & Vars::Menu::IndicatorsEnum::Ping))
 	{
-		static Timer tTimer = {};
-		if (tTimer.Run(0.5f))
-			flFakeLatency = GetFakeLatency();
+		bCachedValid = false;
+		return;
 	}
-	float flFakeLerp = GetFakeInterp() > G::Lerp ? GetFakeInterp() : 0.f;
 
-	float flFake = std::min(flFakeLatency + flFakeLerp, m_flMaxUnlag) * 1000;
-	float flLatency = std::max(pNetChan->GetLatency(FLOW_INCOMING) + pNetChan->GetLatency(FLOW_OUTGOING) - flFakeLatency, 0.f) * 1000;
-	int iLatencyScoreboard = pResource->m_iPing(I::EngineClient->GetLocalPlayer());
+	if (pLocal)
+	{
+		if (!pLocal->IsAlive())
+		{
+			bCachedValid = false;
+			return;
+		}
+
+		auto pResource = H::Entities.GetResource();
+		auto pNetChan = I::EngineClient->GetNetChannelInfo();
+		if (!pResource || !pNetChan)
+		{
+			bCachedValid = false;
+			return;
+		}
+
+		static float flFakeLatency = 0.f;
+		{
+			static Timer tTimer = {};
+			if (tTimer.Run(0.5f))
+				flFakeLatency = GetFakeLatency();
+		}
+		float flFakeLerp = GetFakeInterp() > G::Lerp ? GetFakeInterp() : 0.f;
+
+		float flFake = std::min(flFakeLatency + flFakeLerp, m_flMaxUnlag) * 1000;
+		float flLatency = std::max(pNetChan->GetLatency(FLOW_INCOMING) + pNetChan->GetLatency(FLOW_OUTGOING) - flFakeLatency, 0.f) * 1000;
+		int iLatencyScoreboard = pResource->m_iPing(I::EngineClient->GetLocalPlayer());
+
+		if (flFake || Vars::Backtrack::Interp.Value > G::Lerp * 1000)
+			sPingText = std::format("Ping {:.0f} (+ {:.0f}) ms", flLatency, flFake);
+		else
+			sPingText = std::format("Ping {:.0f} ms", flLatency);
+		sScoreboardText = std::format("Scoreboard {} ms", iLatencyScoreboard);
+		bCachedValid = true;
+	}
+
+	if (!bCachedValid)
+		return;
 
 	int x = Vars::Menu::PingDisplay.Value.x;
 	int y = Vars::Menu::PingDisplay.Value.y + 8;
 	const auto& fFont = H::Fonts.GetFont(FONT_INDICATORS);
 	const int nTall = fFont.m_nTall + H::Draw.Scale(1);
+	ImDrawList* pDrawList = ImGui::GetBackgroundDrawList();
 
 	EAlign align = ALIGN_TOP;
 	if (x <= 100 + H::Draw.Scale(50, Scale_Round))
@@ -441,9 +471,6 @@ void CBacktrack::Draw(CTFPlayer* pLocal)
 		align = ALIGN_TOPRIGHT;
 	}
 
-	if (flFake || Vars::Backtrack::Interp.Value > G::Lerp * 1000)
-		H::Draw.StringOutlined(fFont, x, y, Vars::Menu::Theme::Active.Value, Vars::Menu::Theme::Background.Value, align, std::format("Ping {:.0f} (+ {:.0f}) ms", flLatency, flFake).c_str());
-	else
-		H::Draw.StringOutlined(fFont, x, y, Vars::Menu::Theme::Active.Value, Vars::Menu::Theme::Background.Value, align, std::format("Ping {:.0f} ms", flLatency).c_str());
-	H::Draw.StringOutlined(fFont, x, y += nTall, Vars::Menu::Theme::Active.Value, Vars::Menu::Theme::Background.Value, align, std::format("Scoreboard {} ms", iLatencyScoreboard).c_str());
+	DrawIndicatorText(pDrawList, x, y, Vars::Menu::Theme::Active.Value, Vars::Menu::Theme::Background.Value, align, sPingText);
+	DrawIndicatorText(pDrawList, x, y += nTall, Vars::Menu::Theme::Active.Value, Vars::Menu::Theme::Background.Value, align, sScoreboardText);
 }

@@ -5,6 +5,40 @@
 #include "../../CritHack/CritHack.h"
 #include "../../Backtrack/Backtrack.h"
 
+static const char* GetPasstimeThrowSpeedCvar(CTFPlayer* pPlayer)
+	{
+		switch (pPlayer ? pPlayer->m_iClass() : TF_CLASS_UNDEFINED)
+		{
+		case TF_CLASS_SCOUT: return "tf_passtime_throwspeed_scout";
+		case TF_CLASS_SOLDIER: return "tf_passtime_throwspeed_soldier";
+		case TF_CLASS_PYRO: return "tf_passtime_throwspeed_pyro";
+		case TF_CLASS_DEMOMAN: return "tf_passtime_throwspeed_demoman";
+		case TF_CLASS_HEAVY: return "tf_passtime_throwspeed_heavy";
+		case TF_CLASS_ENGINEER: return "tf_passtime_throwspeed_engineer";
+		case TF_CLASS_MEDIC: return "tf_passtime_throwspeed_medic";
+		case TF_CLASS_SNIPER: return "tf_passtime_throwspeed_sniper";
+		case TF_CLASS_SPY: return "tf_passtime_throwspeed_spy";
+		default: return "tf_passtime_throwspeed_scout";
+		}
+	}
+
+static const char* GetPasstimeThrowArcCvar(CTFPlayer* pPlayer)
+	{
+		switch (pPlayer ? pPlayer->m_iClass() : TF_CLASS_UNDEFINED)
+		{
+		case TF_CLASS_SCOUT: return "tf_passtime_throwarc_scout";
+		case TF_CLASS_SOLDIER: return "tf_passtime_throwarc_soldier";
+		case TF_CLASS_PYRO: return "tf_passtime_throwarc_pyro";
+		case TF_CLASS_DEMOMAN: return "tf_passtime_throwarc_demoman";
+		case TF_CLASS_HEAVY: return "tf_passtime_throwarc_heavy";
+		case TF_CLASS_ENGINEER: return "tf_passtime_throwarc_engineer";
+		case TF_CLASS_MEDIC: return "tf_passtime_throwarc_medic";
+		case TF_CLASS_SNIPER: return "tf_passtime_throwarc_sniper";
+		case TF_CLASS_SPY: return "tf_passtime_throwarc_spy";
+		default: return "tf_passtime_throwarc_scout";
+		}
+	}
+
 bool CProjectileSimulation::GetInfoMain(CTFPlayer* pPlayer, CTFWeaponBase* pWeapon, Vec3 vAngles, ProjectileInfo& tProjInfo, int iFlags, float flAutoCharge)
 {
 	if (!pWeapon || !pPlayer->IsAlive() || pPlayer->IsAGhost() || pPlayer->IsTaunting())
@@ -72,7 +106,7 @@ bool CProjectileSimulation::GetInfoMain(CTFPlayer* pPlayer, CTFWeaponBase* pWeap
 			int iCmdNum = bPredictCmdNum ? F::CritHack.PredictCmdNum(pPlayer, pWeapon, G::CurrentUserCmd) : G::CurrentUserCmd->command_number;
 			SDK::RandomSeed(SDK::SeedFileLineHash(MD5_PseudoRandom(iCmdNum) & 0x7FFFFFFF, "SelectWeightedSequence", 0));
 			for (int i = 0; i < 6; ++i)
-				SDK::RandomFloat();
+				SDK::RandomFloat();//SDK::RandomFloat();
 
 			Vec3 vAngAdd = pWeapon->GetSpreadAngles() - pPlayer->EyeAngles();
 			switch (pWeapon->GetWeaponID())
@@ -100,6 +134,35 @@ bool CProjectileSimulation::GetInfoMain(CTFPlayer* pPlayer, CTFWeaponBase* pWeap
 		float flSpeed = pPlayer->InCond(TF_COND_RUNE_PRECISION) ? 3000.f : SDK::AttribHookValue(1100.f, "mult_projectile_speed", pWeapon);
 		tProjInfo = { pPlayer, pWeapon, uType, vPos, vAngle, { 0.f, 0.f, 0.f }, flSpeed, 0.f };
 		return true;
+	}
+	case TF_WEAPON_LASER_POINTER:
+	{
+		auto pSentryGun = pPlayer->GetObjectOfType(OBJ_SENTRYGUN)->As<CObjectSentrygun>();
+		if (pSentryGun && !pSentryGun->IsDormant() && pSentryGun->GetAttachment(pSentryGun->LookupAttachment("rocket_l"), vPos))
+		{
+			auto uType = FNV1A::Hash32Const("models/buildables/sentry3_rockets.mdl");
+			float flSpeed = pPlayer->InCond(TF_COND_RUNE_PRECISION) ? 3000.f : SDK::AttribHookValue(1100.f, "mult_projectile_speed", pWeapon);
+
+			if (auto pEnemy = pSentryGun->m_hAutoAimTarget().Get()) vAngle = Math::CalcAngle(vPos, pEnemy->GetCenter());
+			else if (auto pLaserDot = H::Entities.GetLaserDot()) vAngle = Math::CalcAngle(vPos, pLaserDot->GetAbsOrigin());
+			else break;
+
+			tProjInfo = { pPlayer, pWeapon, uType, vPos, vAngle, { 0.f, 0.f, 0.f }, flSpeed, 0.f };
+			return true;
+		}
+		break;
+	}
+	case TF_WEAPON_MECHANICAL_ARM:
+	{
+		auto pOwner = pWeapon->m_hOwner().Get()->As<CTFPlayer>();
+		if (pOwner && pOwner->IsPlayer() && pOwner->m_iMetalCount() >= 65)
+		{
+			auto uType = FNV1A::Hash32Const("models/weapons/w_models/w_drg_ball.mdl");
+			SDK::GetProjectileFireSetup(pPlayer, vAngles, { 40.f, 15.f, -10.f }, vPos, vAngle, 0.f, 0.f, bInterp);
+			tProjInfo = { pPlayer, pWeapon, uType, vPos, vAngle, Vec3(), 700.f, 0.f, 1.2f };
+			return true;
+		}
+		break;
 	}
 	case TF_WEAPON_PARTICLE_CANNON:
 	case TF_WEAPON_RAYGUN:
@@ -319,6 +382,29 @@ bool CProjectileSimulation::GetInfoMain(CTFPlayer* pPlayer, CTFWeaponBase* pWeap
 		}
 		break;
 	}
+	case TF_WEAPON_PASSTIME_GUN:
+	{
+		static auto tf_passtime_throwspeed_velocity_scale = H::ConVars.FindVar("tf_passtime_throwspeed_velocity_scale");
+		const auto pszSpeed = GetPasstimeThrowSpeedCvar(pPlayer);
+		const auto pszArc = GetPasstimeThrowArcCvar(pPlayer);
+		auto pThrowSpeed = H::ConVars.FindVar(pszSpeed);
+		auto pThrowArc = H::ConVars.FindVar(pszArc);
+		if (!pThrowSpeed || !pThrowArc)
+			return false;
+
+		Vec3 vThrowAngles = vAngles;
+		vThrowAngles.x -= pThrowArc->GetFloat();
+		SDK::GetProjectileFireSetup(pPlayer, vThrowAngles, { 16.f, 8.f, -6.f }, vPos, vAngle, 0.f, 0.f, bInterp);
+
+		Vec3 vForward = {};
+		Math::AngleVectors(vAngle, &vForward);
+		float flSpeed = pThrowSpeed->GetFloat();
+		if (auto pScale = tf_passtime_throwspeed_velocity_scale)
+			flSpeed = std::max(0.f, flSpeed + pPlayer->m_vecVelocity().Dot(vForward) * pScale->GetFloat());
+
+		tProjInfo = { pPlayer, pWeapon, FNV1A::Hash32Const("models/passtime/ball/passtime_ball.mdl"), vPos, vAngle, { 3.f, 3.f, 3.f }, flSpeed, 1.f, 8.f };
+		return true;
+	}
 	}
 
 	return false;
@@ -344,9 +430,11 @@ bool CProjectileSimulation::GetInfo(CTFPlayer* pPlayer, CTFWeaponBase* pWeapon, 
 	if (!bReturn || !bInitCheck)
 		return bReturn;
 
+	if (tProjInfo.m_uType == FNV1A::Hash32Const("models/buildables/sentry3_rockets.mdl"))
+		return true;
+
 	CGameTrace trace = {};
-	CTraceFilterWorldAndPropsOnly filter = {};
-	filter.pSkip = pPlayer;
+	CTraceFilterWorldAndPropsOnly filter(pPlayer);
 
 	Vec3 vStart = bInterp ? pPlayer->GetEyePosition() : pPlayer->GetShootPos();
 	Vec3 vEnd = tProjInfo.m_vPos;
@@ -715,7 +803,7 @@ void CProjectileSimulation::SetupTrace(CTraceFilterCollideable& filter, int& nMa
 		switch (pWeapon->GetWeaponID())
 		{
 		case TF_WEAPON_RAYGUN:
-			filter.iObject = OBJECT_DEFAULT;
+			filter.m_iObject = OBJECT_DEFAULT;
 			break;
 		case TF_WEAPON_FLAMETHROWER:
 		case TF_WEAPON_FLAME_BALL:
@@ -725,7 +813,7 @@ void CProjectileSimulation::SetupTrace(CTraceFilterCollideable& filter, int& nMa
 		case TF_WEAPON_SYRINGEGUN_MEDIC:
 		case TF_WEAPON_BAT_GIFTWRAP:
 			if (bInterp)
-				filter.iPlayer = PLAYER_ALL;
+				filter.m_iPlayer = PLAYER_ALL;
 		}
 		break;
 	case 16:
@@ -737,7 +825,7 @@ void CProjectileSimulation::SetupTrace(CTraceFilterCollideable& filter, int& nMa
 			case TF_WEAPON_GRAPPLINGHOOK:
 				break;
 			default:
-				filter.iPlayer = PLAYER_ALL;
+				filter.m_iPlayer = PLAYER_ALL;
 			}
 		}
 	}
@@ -751,7 +839,7 @@ void CProjectileSimulation::SetupTrace(CTraceFilterCollideable& filter, int& nMa
 	switch (pProjectile->GetClassID())
 	{
 	case ETFClassID::CTFProjectile_EnergyRing:
-		filter.iObject = OBJECT_DEFAULT;
+		filter.m_iObject = OBJECT_DEFAULT;
 		break;
 	case ETFClassID::CTFProjectile_BallOfFire:
 		nMask |= CONTENTS_WATER;

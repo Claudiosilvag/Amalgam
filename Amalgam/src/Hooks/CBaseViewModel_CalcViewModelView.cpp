@@ -8,6 +8,7 @@ MAKE_HOOK(CBaseViewModel_CalcViewModelView, S::CBaseViewModel_CalcViewModelView(
 {
 	DEBUG_RETURN(CBaseViewModel_CalcViewModelView, rcx, owner, eyePosition, eyeAngles);
 
+#ifndef TEXTMODE
 	Vec3 vOffset = { Vars::Visuals::Viewmodel::OffsetX.Value, Vars::Visuals::Viewmodel::OffsetY.Value, Vars::Visuals::Viewmodel::OffsetZ.Value };
 	Vec3 vAngles = { Vars::Visuals::Viewmodel::Pitch.Value, Vars::Visuals::Viewmodel::Yaw.Value, Vars::Visuals::Viewmodel::Roll.Value };
 	if (!Vars::Visuals::Viewmodel::ViewmodelAim.Value && vOffset.IsZero() && vAngles.IsZero() || SDK::CleanScreenshot())
@@ -41,6 +42,7 @@ MAKE_HOOK(CBaseViewModel_CalcViewModelView, S::CBaseViewModel_CalcViewModelView(
 		eyeAngles.z += vAngles.z * (bFlip ? -1 : 1);
 
 	CALL_ORIGINAL(rcx, owner, eyePosition, eyeAngles);
+#endif
 }
 
 MAKE_HOOK(CBasePlayer_CalcViewModelView, S::CBasePlayer_CalcViewModelView(), void,

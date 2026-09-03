@@ -1,8 +1,9 @@
 #pragma once
 #include "../../../SDK/SDK.h"
+
+#ifndef TEXTMODE
 #include "../Render.h"
 #include <ImGui/TextEditor.h>
-#include <mutex>
 
 struct Output_t
 {
@@ -18,12 +19,13 @@ class CMenu
 private:
 	void DrawMenu();
 
-	void MenuAimbot(int iTab = 0);
-	void MenuHVH(int iTab = 0);
-	void MenuVisuals(int iTab = 0);
-	void MenuMisc(int iTab = 0);
-	void MenuLogs(int iTab = 0);
-	void MenuSettings(int iTab = 0);
+	void MenuAimbot(int iTab);
+	void MenuVisuals(int iTab);
+	void MenuHvH(int iTab);
+	void MenuMisc(int iTab);
+	void MenuAnticheat(int iTab);
+	void MenuLogs(int iTab);
+	void MenuSettings(int iTab);
 	void MenuSearch(std::string sSearch);
 
 	void AddDraggable(const char* sLabel, ConfigVar<DragBox_t>& tVar, bool bShouldDraw = true, ImVec2 vSize = { H::Draw.Scale(100), H::Draw.Scale(40) });
@@ -36,12 +38,38 @@ private:
 public:
 	void Render();
 	void AddOutput(const char* sFunction, const char* sLog, Color_t tColor = Vars::Menu::Theme::Accent.Value);
+	void ShowNotification(const char* sTitle, const char* sMessage);
+	void ShowDeferredNotification(const char* sTitle, const char* sMessage);
+	void ProcessDeferredNotifications();
+	void DrawNotifications();
 
 	bool m_bIsOpen = false;
 	bool m_bInKeybind = false;
 	bool m_bWindowHovered = false;
 
-	std::mutex m_tMutex;
+	struct Notification_t
+	{
+		std::string m_sTitle;
+		std::string m_sMessage;
+		bool m_bVisible;
+	};
+	std::vector<Notification_t> m_vNotifications;
+	std::vector<Notification_t> m_vDeferredNotifications;
 };
+#else
+class CMenu
+{
+public:
+	void Render() {}
+	void AddOutput(const char*, const char*, Color_t = {}) {}
+	void ShowNotification(const char*, const char*) {}
+	void ShowDeferredNotification(const char*, const char*) {}
+	void ProcessDeferredNotifications() {}
+	void DrawNotifications() {}
+	bool m_bIsOpen = false;
+	bool m_bInKeybind = false;
+	bool m_bWindowHovered = false;
+};
+#endif // !TEXTMODE
 
 ADD_FEATURE(CMenu, Menu);

@@ -9,6 +9,7 @@ MAKE_HOOK(CBaseHudChatLine_InsertAndColorizeText, S::CBaseHudChatLine_InsertAndC
 {
 	DEBUG_RETURN(CBaseHudChatLine_InsertAndColorizeText, rcx, buf, clientIndex);
 
+#ifndef TEXTMODE
 	auto pResource = H::Entities.GetResource();
 	if (!pResource || !pResource->IsValid(clientIndex))
 		return CALL_ORIGINAL(rcx, buf, clientIndex);
@@ -89,4 +90,5 @@ MAKE_HOOK(CBaseHudChatLine_InsertAndColorizeText, S::CBaseHudChatLine_InsertAndC
 	}
 
 	CALL_ORIGINAL(rcx, const_cast<wchar_t*>(SDK::ConvertUtf8ToWide(sMessage).c_str()), clientIndex);
+#endif
 }

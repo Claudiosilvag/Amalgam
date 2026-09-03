@@ -1,3 +1,4 @@
+#ifndef TEXTMODE
 #include "../SDK/SDK.h"
 
 #include "../Features/Spectate/Spectate.h"
@@ -47,3 +48,4 @@ MAKE_HOOK(CThirdPersonManager_GetFinalCameraOffset, S::CThirdPersonManager_GetFi
 	I::ThirdPersonManager->m_flUpOffset = flOriginalUpOffset;
 	return vReturn;
 }
+#endif

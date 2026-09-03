@@ -11,6 +11,7 @@ MAKE_SIGNATURE(CTFHudMatchStatus_UpdatePlayerAvatar, "client.dll", "4D 85 C0 0F 
 MAKE_SIGNATURE(SectionedListPanel_SetItemFgColor, "client.dll", "40 53 48 83 EC ? 48 8B D9 3B 91 ? ? ? ? 73 ? 3B 91 ? ? ? ? 7F ? 48 8B 89 ? ? ? ? 48 89 7C 24 ? 8B FA 48 03 FF 39 54 F9 ? 75 ? 39 54 F9 ? 75 ? 48 8B 0C F9 41 8B D0 48 8B 01 FF 90 ? ? ? ? 48 8B 83 ? ? ? ? B2 ? 48 8B 0C F8 48 8B 01 FF 90 ? ? ? ? 48 8B 83 ? ? ? ? 45 33 C0", 0x0);
 MAKE_SIGNATURE(CTFClientScoreBoardDialog_UpdatePlayerList_SetItemFgColor_Call, "client.dll", "49 8B 04 24 8B D5 C7 44 24", 0x0);
 
+#ifndef TEXTMODE
 enum EAvatarSize
 {
 	k_EAvatarSize32x32 = 0,
@@ -59,16 +60,19 @@ MAKE_HOOK(CAvatarImagePanel_SetPlayer, S::CAvatarImagePanel_SetPlayer(), void,
 
 	CALL_ORIGINAL(rcx, CSteamID(), avatarSize);
 }
+#endif
 
 MAKE_HOOK(CTFClientScoreBoardDialog_UpdatePlayerAvatar, S::CTFClientScoreBoardDialog_UpdatePlayerAvatar(), void,
 	void* rcx, int playerIndex, KeyValues* kv)
 {
 	DEBUG_RETURN(CTFClientScoreBoardDialog_UpdatePlayerAvatar, rcx, playerIndex, kv);
 
+#ifndef TEXTMODE
 	s_iPlayerIndex = playerIndex;
 
 	if (!(F::PlayerUtils.GetNameType(playerIndex) & NameTypeEnum::Privacy))
 		CALL_ORIGINAL(rcx, playerIndex, kv);
+#endif
 }
 
 MAKE_HOOK(CTFMatchSummary_UpdatePlayerAvatar, S::CTFMatchSummary_UpdatePlayerAvatar(), void,
@@ -76,8 +80,10 @@ MAKE_HOOK(CTFMatchSummary_UpdatePlayerAvatar, S::CTFMatchSummary_UpdatePlayerAva
 {
 	DEBUG_RETURN(CTFMatchSummary_UpdatePlayerAvatar, rcx, playerIndex, kv);
 
+#ifndef TEXTMODE
 	if (!(F::PlayerUtils.GetNameType(playerIndex) & NameTypeEnum::Privacy))
 		CALL_ORIGINAL(rcx, playerIndex, kv);
+#endif
 }
 
 MAKE_HOOK(CTFHudMannVsMachineScoreboard_UpdatePlayerAvatar, S::CTFHudMannVsMachineScoreboard_UpdatePlayerAvatar(), void,
@@ -85,8 +91,10 @@ MAKE_HOOK(CTFHudMannVsMachineScoreboard_UpdatePlayerAvatar, S::CTFHudMannVsMachi
 {
 	DEBUG_RETURN(CTFHudMannVsMachineScoreboard_UpdatePlayerAvatar, rcx, playerIndex, kv);
 
+#ifndef TEXTMODE
 	if (!(F::PlayerUtils.GetNameType(playerIndex) & NameTypeEnum::Privacy))
 		CALL_ORIGINAL(rcx, playerIndex, kv);
+#endif
 }
 
 MAKE_HOOK(CTFHudMatchStatus_UpdatePlayerAvatar, S::CTFHudMatchStatus_UpdatePlayerAvatar(), void,
@@ -94,8 +102,10 @@ MAKE_HOOK(CTFHudMatchStatus_UpdatePlayerAvatar, S::CTFHudMatchStatus_UpdatePlaye
 {
 	DEBUG_RETURN(CTFHudMatchStatus_UpdatePlayerAvatar, rcx, playerIndex, kv);
 
+#ifndef TEXTMODE
 	if (!(F::PlayerUtils.GetNameType(playerIndex) & NameTypeEnum::Privacy))
 		CALL_ORIGINAL(rcx, playerIndex, kv);
+#endif
 }
 
 MAKE_HOOK(SectionedListPanel_SetItemFgColor, S::SectionedListPanel_SetItemFgColor(), void,
@@ -103,6 +113,7 @@ MAKE_HOOK(SectionedListPanel_SetItemFgColor, S::SectionedListPanel_SetItemFgColo
 {
 	DEBUG_RETURN(SectionedListPanel_SetItemFgColor, rcx, itemID, color);
 
+#ifndef TEXTMODE
 	const auto dwRetAddr = uintptr_t(_ReturnAddress());
 	const auto dwDesired = S::CTFClientScoreBoardDialog_UpdatePlayerList_SetItemFgColor_Call();
 
@@ -110,4 +121,5 @@ MAKE_HOOK(SectionedListPanel_SetItemFgColor, S::SectionedListPanel_SetItemFgColo
 		SetScoreboardColor(s_iPlayerIndex, color);
 
 	CALL_ORIGINAL(rcx, itemID, color);
+#endif
 }

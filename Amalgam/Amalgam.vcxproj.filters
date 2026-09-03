@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <ClCompile Include="src\Core\Core.cpp" />
@@ -44,6 +44,8 @@
     <ClCompile Include="src\Features\Aimbot\AutoRocketJump\AutoRocketJump.cpp" />
     <ClCompile Include="src\Features\Aimbot\AutoHeal\AutoHeal.cpp" />
     <ClCompile Include="src\Features\Misc\AutoQueue\AutoQueue.cpp" />
+    <ClCompile Include="src\Features\Misc\AutoQueue\MvmQueue.cpp" />
+    <ClCompile Include="src\Features\Misc\ProfileStalker\ProfileStalker.cpp" Condition="Exists('src\Features\Misc\ProfileStalker\ProfileStalker.cpp')" />
     <ClCompile Include="src\Features\Backtrack\Backtrack.cpp" />
     <ClCompile Include="src\Features\CheatDetection\CheatDetection.cpp" />
     <ClCompile Include="src\Features\CritHack\CritHack.cpp" />
@@ -87,7 +89,6 @@
     <ClCompile Include="src\Hooks\CBaseAnimating_SetSequence.cpp" />
     <ClCompile Include="src\Hooks\CBaseAnimating_SetupBones.cpp" />
     <ClCompile Include="src\Hooks\CTFPlayer_UpdateClientSideAnimation.cpp" />
-    <ClCompile Include="src\Hooks\CBaseViewModel_Interpolate.cpp" />
     <ClCompile Include="src\Hooks\CBaseEntity_EstimateAbsVelocity.cpp" />
     <ClCompile Include="src\Hooks\CTFPlayer_FireBullet.cpp" />
     <ClCompile Include="src\Hooks\CBaseEntity_ResetLatched.cpp" />
@@ -98,21 +99,18 @@
     <ClCompile Include="src\Hooks\CBaseViewModel_CalcViewModelView.cpp" />
     <ClCompile Include="src\Hooks\CBasePlayer_ItemPostFrame.cpp" />
     <ClCompile Include="src\Hooks\CBaseViewModel_ShouldFlipViewModel.cpp" />
-    <ClCompile Include="src\Hooks\CHLClient_CreateMove.cpp" />
     <ClCompile Include="src\Hooks\CClientModeShared_DoPostScreenSpaceEffects.cpp" />
     <ClCompile Include="src\Hooks\CClientModeShared_OverrideView.cpp" />
     <ClCompile Include="src\Hooks\CClientModeShared_ShouldDrawViewModel.cpp" />
     <ClCompile Include="src\Hooks\CClientState_GetClientInterpAmount.cpp" />
     <ClCompile Include="src\Hooks\CClientState_ProcessFixAngle.cpp" />
     <ClCompile Include="src\Hooks\CHudCrosshair_GetDrawPosition.cpp" />
-    <ClCompile Include="src\Hooks\CInventoryManager_ShowItemsPickedUp.cpp" />
     <ClCompile Include="src\Hooks\CL_CheckForPureServerWhitelist.cpp" />
     <ClCompile Include="src\Hooks\CL_Move.cpp" />
     <ClCompile Include="src\Hooks\CL_ProcessPacketEntities.cpp" />
     <ClCompile Include="src\Hooks\CL_ReadPackets.cpp" />
     <ClCompile Include="src\Hooks\ClientModeTFNormal_BIsFriendOrPartyMember.cpp" />
     <ClCompile Include="src\Hooks\CMatchInviteNotification_OnTick.cpp" />
-    <ClCompile Include="src\Hooks\CMaterial_Uncache.cpp" />
     <ClCompile Include="src\Hooks\CNetChannel_SendDatagram.cpp" />
     <ClCompile Include="src\Hooks\CNetChannel_SendNetMsg.cpp" />
     <ClCompile Include="src\Hooks\COPRenderSprites_Render.cpp" />
@@ -129,6 +127,7 @@
     <ClCompile Include="src\Hooks\CTFBadgePanel_SetupBadge.cpp" />
     <ClCompile Include="src\Hooks\CTFClientScoreBoardDialog_UpdatePlayerAvatar.cpp" />
     <ClCompile Include="src\Hooks\CTFInput_ApplyMouse.cpp" />
+    <ClCompile Include="src\Hooks\CTFInventoryManager_ShowItemsPickedUp.cpp" />
     <ClCompile Include="src\Hooks\CTFPlayer_AvoidPlayers.cpp" />
     <ClCompile Include="src\Hooks\CTFPlayer_BRenderAsZombie.cpp" />
     <ClCompile Include="src\Hooks\CTFPlayer_BuildTransformations.cpp" />
@@ -159,6 +158,7 @@
     <ClCompile Include="src\Hooks\IEngineVGui_Paint.cpp" />
     <ClCompile Include="src\Hooks\CInput_GetUserCmd.cpp" />
     <ClCompile Include="src\Hooks\IPanel_PaintTraverse.cpp" />
+    <ClCompile Include="src\Hooks\IsFreeTrialAccount.cpp" />
     <ClCompile Include="src\Hooks\ISteamFriends_GetFriendPersonaName.cpp" />
     <ClCompile Include="src\Hooks\ISteamNetworkingUtils_GetPingToDataCenter.cpp" />
     <ClCompile Include="src\Hooks\IVModelRender_DrawModelExecute.cpp" />
@@ -178,17 +178,69 @@
     <ClCompile Include="src\SDK\Definitions\Main\CBaseObject.cpp" />
     <ClCompile Include="src\SDK\Definitions\Main\CBasePlayer.cpp" />
     <ClCompile Include="src\SDK\Definitions\Main\CBaseProjectile.cpp" />
-    <ClCompile Include="src\Hooks\CTFRocketLauncher_CheckReloadMisfire.cpp" />
+    <ClCompile Include="src\SDK\Definitions\Main\CEntityMapData.cpp" />
+    <ClCompile Include="src\SDK\Definitions\Main\ValveRandom.cpp" />
     <ClCompile Include="src\Features\Visuals\Groups\Groups.cpp" />
+    <ClCompile Include="src\Features\AutoJoin\AutoJoin.cpp" />
+    <ClCompile Include="src\Features\Killstreak\Killstreak.cpp" />
+    <ClCompile Include="src\Features\Misc\AutoItem\AutoItem.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavEngine\Controllers\CPController\CPController.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavEngine\Controllers\FlagController\FlagController.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavEngine\Controllers\HaarpController\HaarpController.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavEngine\Controllers\DoomsdayController\DoomsdayController.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavEngine\Controllers\MVMController\MVMController.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavEngine\Controllers\PasstimeController\PasstimeController.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavEngine\Controllers\PLController\PLController.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavEngine\Controllers\Controller.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavEngine\NavEngine.cpp" />
+    <ClCompile Include="src\Features\Misc\NamedPipe\NamedPipe.cpp" />
+    <ClCompile Include="src\Features\FollowBot\FollowBot.cpp" />
+    <ClCompile Include="src\Features\NavBot\BotUtils.cpp" />
+    <ClCompile Include="src\Features\NavBot\BotUtilsJump.cpp" />
+    <ClCompile Include="src\Features\NavBot\BotUtilsLook.cpp" />
+    <ClCompile Include="src\Features\NavBot\BotUtilsScope.cpp" />
+    <ClCompile Include="src\Features\NavBot\Hazards\Hazards.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavBotCore.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavAreaUtils.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavBotConfig.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavRuntime.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavEngine\Map.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavEngine\PathWorker.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavBotJobs\GroupWithOthers.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavBotJobs\Roam.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavBotJobs\StayNear.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavBotJobs\Capture.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavBotJobs\Melee.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavBotJobs\MVMSniper.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavBotJobs\GetSupplies.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavBotJobs\Reload.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavBotJobs\Engineer.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavBotJobs\SnipeSentry.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavBotJobs\EscapeDanger.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavBotJobs\JobSystem.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavBotJobs\NavJobUtils.cpp" />
+    <ClCompile Include="src\Features\Players\SteamProfileCache.cpp" />
+    <ClCompile Include="src\Features\Createmove\Createmove.cpp" />
+    <ClCompile Include="src\Hooks\CGameEventManager_FireEventClientSide.cpp" />
+    <ClCompile Include="src\Hooks\CHudItemEffectMeter_Weapon_C_TFWeaponBase_IsEnabled.cpp" />
+    <ClCompile Include="src\Hooks\CHudTournamentSetup_OnTick.cpp" />
+    <ClCompile Include="src\Hooks\CTFGCClientSystem_SOCreated.cpp" />
+    <ClCompile Include="src\Hooks\Host_IsSecureServerAllowed.cpp" />
+    <ClCompile Include="src\Hooks\CBoneFollower_TestCollision.cpp" />
+    <ClCompile Include="src\Hooks\CTFHudPlayerClass_UpdateModelPanel.cpp" />
+    <ClCompile Include="src\Hooks\Voice_Enabled.cpp" />
+    <ClCompile Include="src\Hooks\CEntityMapData_ExtractValue.cpp" />
+    <ClCompile Include="src\Hooks\CBasePlayer_CalcObserverView.cpp" />
+    <ClCompile Include="src\Hooks\CTFPlayerShared_ShouldSuppressPrediction.cpp" />
+    <ClCompile Include="src\Hooks\CHLTVCamera_CalcView.cpp" />
+    <ClCompile Include="src\Hooks\CTFPlayer_InSameDisguisedTeam.cpp" />
+    <ClCompile Include="src\Hooks\CTFRocketLauncher_CheckReloadMisfire.cpp" />
     <ClCompile Include="src\Hooks\CInput_ValidateUserCmd.cpp" />
     <ClCompile Include="src\Hooks\CTFWeaponBase_CanFireRandomCriticalShot.cpp" />
     <ClCompile Include="src\Hooks\CTFPlayer_GetMinFOV.cpp" />
     <ClCompile Include="src\Hooks\CWeaponMedigun_PrimaryAttack.cpp" />
     <ClCompile Include="src\Hooks\IMaterialSystem_FindTexture.cpp" />
-    <ClCompile Include="src\Hooks\CBasePlayer_CalcObserverView.cpp" />
-    <ClCompile Include="src\Hooks\CTFPlayerShared_ShouldSuppressPrediction.cpp" />
-    <ClCompile Include="src\Hooks\CHLTVCamera_CalcView.cpp" />
-    <ClCompile Include="src\Hooks\CTFPlayer_InSameDisguisedTeam.cpp" />
+    <ClCompile Include="src\Hooks\CBaseViewModel_Interpolate.cpp" />
     <ClCompile Include="src\SDK\Definitions\Misc\CUtlBuffer.cpp" />
     <ClCompile Include="src\SDK\Definitions\Misc\CUtlCharConversion.cpp" />
     <ClCompile Include="src\SDK\Definitions\Misc\CByteSwap.cpp" />
@@ -209,6 +261,7 @@
     <ClCompile Include="src\Features\AntiCheatCompatibility\AntiCheatCompatibility.cpp" />
     <ClCompile Include="src\Features\Debug\Debug.cpp" />
     <ClCompile Include="src\Hooks\CTFGrapplingHook_ItemPostFrame.cpp" />
+    <ClCompile Include="src\Hooks\CAvatarImage_ApplyImage.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\Utils\UtlVector\UtlVector.h" />
@@ -384,6 +437,7 @@
     <ClInclude Include="src\SDK\Definitions\Steam\SteamUniverse.h" />
     <ClInclude Include="src\SDK\Definitions\Interfaces\SteamInterfaces.h" />
     <ClInclude Include="src\Features\ImGui\Render.h" />
+    <ClInclude Include="src\Features\ImGui\IndicatorPanel.h" />
     <ClInclude Include="src\Features\Aimbot\Aimbot.h" />
     <ClInclude Include="src\Features\Aimbot\AimbotGlobal\AimbotGlobal.h" />
     <ClInclude Include="src\Features\Aimbot\AimbotHitscan\AimbotHitscan.h" />
@@ -394,6 +448,8 @@
     <ClInclude Include="src\Features\Aimbot\AutoRocketJump\AutoRocketJump.h" />
     <ClInclude Include="src\Features\Aimbot\AutoHeal\AutoHeal.h" />
     <ClInclude Include="src\Features\Misc\AutoQueue\AutoQueue.h" />
+    <ClInclude Include="src\Features\Misc\AutoQueue\MvmQueue.h" />
+    <ClInclude Include="src\Features\Misc\ProfileStalker\ProfileStalker.h" Condition="Exists('src\Features\Misc\ProfileStalker\ProfileStalker.h')" />
     <ClInclude Include="src\Features\Backtrack\Backtrack.h" />
     <ClInclude Include="src\Features\CheatDetection\CheatDetection.h" />
     <ClInclude Include="src\Features\CritHack\CritHack.h" />
@@ -440,7 +496,6 @@
     <ClInclude Include="src\SDK\Helpers\TraceFilters\TraceFilters.h" />
     <ClInclude Include="src\SDK\Definitions\Interfaces\IVModelRender.h" />
     <ClInclude Include="src\SDK\Definitions\Interfaces\IStudioRender.h" />
-    <ClInclude Include="src\SDK\Definitions\Misc\IMDLCache.h" />
     <ClInclude Include="src\SDK\Definitions\Steam\ISteamApps.h" />
     <ClInclude Include="src\SDK\Definitions\Steam\ISteamClient.h" />
     <ClInclude Include="src\SDK\Definitions\Steam\ISteamAppList.h" />
@@ -576,12 +631,58 @@
     <ClInclude Include="src\SDK\Definitions\Misc\CInterpolatedVar.h" />
     <ClInclude Include="src\SDK\Definitions\Misc\CRangeCheckedVar.h" />
     <ClInclude Include="src\Features\Visuals\Groups\Groups.h" />
+    <ClInclude Include="src\Features\AutoJoin\AutoJoin.h" />
+    <ClInclude Include="src\Features\Killstreak\Killstreak.h" />
+    <ClInclude Include="src\Features\Misc\AutoItem\AutoItem.h" />
+    <ClInclude Include="src\Features\NavBot\NavEngine\Controllers\CPController\CPController.h" />
+    <ClInclude Include="src\Features\NavBot\NavEngine\Controllers\FlagController\FlagController.h" />
+    <ClInclude Include="src\Features\NavBot\NavEngine\Controllers\HaarpController\HaarpController.h" />
+    <ClInclude Include="src\Features\NavBot\NavEngine\Controllers\DoomsdayController\DoomsdayController.h" />
+    <ClInclude Include="src\Features\NavBot\NavEngine\Controllers\MVMController\MVMController.h" />
+    <ClInclude Include="src\Features\NavBot\NavEngine\Controllers\PasstimeController\PasstimeController.h" />
+    <ClInclude Include="src\Features\NavBot\NavEngine\Controllers\PLController\PLController.h" />
+    <ClInclude Include="src\Features\NavBot\NavEngine\Controllers\Controller.h" />
+    <ClInclude Include="src\Features\NavBot\NavEngine\FileReader\CNavFile.h" />
+    <ClInclude Include="src\Features\NavBot\NavEngine\FileReader\nav.h" />
+    <ClInclude Include="src\Features\NavBot\NavEngine\NavEngine.h" />
+    <ClInclude Include="src\Features\Misc\NamedPipe\NamedPipe.h" />
+    <ClInclude Include="src\Features\FollowBot\FollowBot.h" />
+    <ClInclude Include="src\Features\NavBot\BotUtils.h" />
+    <ClInclude Include="src\Features\NavBot\Hazards\Hazards.h" />
+    <ClInclude Include="src\Features\NavBot\NavBotCore.h" />
+    <ClInclude Include="src\Features\NavBot\NavAreaUtils.h" />
+    <ClInclude Include="src\Features\NavBot\NavBotConfig.h" />
+    <ClInclude Include="src\Features\NavBot\NavRuntime.h" />
+    <ClInclude Include="src\Features\NavBot\NavEngine\Map.h" />
+    <ClInclude Include="src\Features\NavBot\NavEngine\PathWorker.h" />
+    <ClInclude Include="src\Features\NavBot\NavBotJobs\NavBotJobs.h" />
+    <ClInclude Include="src\Features\Players\SteamProfileCache.h" />
+    <ClInclude Include="src\Features\Createmove\Createmove.h" />
     <ClInclude Include="src\SDK\Definitions\Interfaces\IFileSystem.h" />
     <ClInclude Include="src\SDK\Definitions\Interfaces\ILocalize.h" />
     <ClInclude Include="src\SDK\Definitions\Interfaces\IMemAlloc.h" />
-    <ClInclude Include="src\SDK\Definitions\Main\CPredictionCopy.h" />
     <ClInclude Include="src\SDK\Definitions\Interfaces\CHLTVCamera.h" />
     <ClInclude Include="src\SDK\Definitions\Interfaces\CThirdPersonManager.h" />
+    <ClInclude Include="src\SDK\Definitions\Interfaces\CServerTools.h" />
+    <ClInclude Include="src\SDK\Definitions\Interfaces\CTFInventoryManager.h" />
+    <ClInclude Include="src\SDK\Definitions\Interfaces\CModelLoader.h" />
+    <ClInclude Include="src\SDK\Definitions\Interfaces\IDemoPlayer.h" />
+    <ClInclude Include="src\SDK\Definitions\Interfaces\IDemoRecorder.h" />
+    <ClInclude Include="src\SDK\Definitions\Misc\IMDLCache.h" />
+    <ClInclude Include="src\SDK\Definitions\Main\CPredictionCopy.h" />
+    <ClInclude Include="src\SDK\Definitions\Main\CBaseTeamObjectiveResource.h" />
+    <ClInclude Include="src\SDK\Definitions\Main\CFuncPasstimeGoal.h" />
+    <ClInclude Include="src\SDK\Definitions\Main\CPasstimeBall.h" />
+    <ClInclude Include="src\SDK\Definitions\Main\CTFPasstimeLogic.h" />
+    <ClInclude Include="src\SDK\Definitions\Main\CServerBaseEntity.h" />
+    <ClInclude Include="src\SDK\Definitions\Main\IServerEntity.h" />
+    <ClInclude Include="src\SDK\Definitions\Main\IServerUnknown.h" />
+    <ClInclude Include="src\SDK\Definitions\Main\ValveRandom.h" />
+    <ClInclude Include="src\SDK\Definitions\Main\CBaseToggle.h" />
+    <ClInclude Include="src\SDK\Definitions\Main\CBaseTrigger.h" />
+    <ClInclude Include="src\SDK\Definitions\Main\CFuncRespawnRoom.h" />
+    <ClInclude Include="src\SDK\Definitions\Main\CFuncRespawnRoomShim.h" />
+    <ClInclude Include="src\SDK\Definitions\Main\CEntityMapData.h" />
     <ClInclude Include="src\SDK\Definitions\Interfaces\CCollisionBSPData.h" />
     <ClInclude Include="src\SDK\Definitions\Misc\CUtlCharConversion.h" />
     <ClInclude Include="src\SDK\Definitions\Misc\CUtlIntrusiveList.h" />
@@ -636,3 +737,5 @@
     <Library Include="include\freetype\freetype.lib" />
   </ItemGroup>
 </Project>
+
+

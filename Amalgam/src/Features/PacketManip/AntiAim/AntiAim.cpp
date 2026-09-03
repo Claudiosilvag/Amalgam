@@ -32,7 +32,7 @@ bool CAntiAim::YawOn()
 
 bool CAntiAim::ShouldRun(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd)
 {
-	if (!pLocal->IsAlive() || pLocal->IsAGhost() || pLocal->IsTaunting() || pLocal->m_MoveType() != MOVETYPE_WALK || pLocal->InCond(TF_COND_HALLOWEEN_KART)
+	if (!pLocal->IsAlive() || pLocal->IsAGhost() || (pLocal->IsTaunting() && !Vars::AntiAim::TauntSpin.Value) || pLocal->m_MoveType() != MOVETYPE_WALK && !(pLocal->IsTaunting() && Vars::AntiAim::TauntSpin.Value) || pLocal->InCond(TF_COND_HALLOWEEN_KART)
 		|| G::Attacking == 1 || F::AutoRocketJump.IsRunning() || F::Ticks.m_bDoubletap // this m_bDoubletap check can probably be removed if we fix tickbase correctly
 		|| pWeapon && pWeapon->m_iItemDefinitionIndex() == Soldier_m_TheBeggarsBazooka && pCmd->buttons & IN_ATTACK && !(G::LastUserCmd->buttons & IN_ATTACK))
 		return false;
@@ -41,6 +41,77 @@ bool CAntiAim::ShouldRun(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pC
 		return false;
 
 	return true;
+}
+
+void CAntiAim::ResetState()
+{
+	m_mJitter.clear();
+	m_flUltraNextChange[0] = m_flUltraNextChange[1] = 0.f;
+	m_flUltraYawOffset[0] = m_flUltraYawOffset[1] = 0.f;
+	m_bUltraSpin[0] = m_bUltraSpin[1] = false;
+	m_flUltraSpinSpeed[0] = m_flUltraSpinSpeed[1] = 0.f;
+	m_bSideways = false;
+	m_flOmegaYaw = 0.f;
+	m_flTornadoYaw[0] = m_flTornadoYaw[1] = 0.f;
+	m_flTornadoSpeed[0] = m_flTornadoSpeed[1] = 0.f;
+	m_iTornadoRetune[0] = m_iTornadoRetune[1] = 0;
+	m_flHelixPhase[0] = m_flHelixPhase[1] = 0.f;
+	m_iQuantumShift[0] = m_iQuantumShift[1] = 0;
+	m_flQuantumYaw[0] = m_flQuantumYaw[1] = 0.f;
+	m_flPitchUltraNext = 0.f;
+	m_flPitchUltra = 0.f;
+	m_flPitchUltraNextFake = 0.f;
+	m_flPitchUltraFake = 0.f;
+	m_iMoonwalkNext = 0;
+	m_flMoonwalkPitch = 0.f;
+	m_bTimedFlipUp = false;
+	m_flTimedFlipNext = 0.f;
+	m_bTimedFlipRandUp = false;
+	m_flTimedFlipRandNext = 0.f;
+	m_bMinWalkVar = true;
+}
+
+bool CAntiAim::CheckAndResetTime()
+{
+	if (!I::GlobalVars)
+		return false;
+	float flCurTime = I::GlobalVars->curtime;
+	int iTick = I::GlobalVars->tickcount;
+	bool bReset = false;
+	if (m_flLastCurTime > 0.f && flCurTime < m_flLastCurTime - 0.5f)
+		bReset = true;
+	if (m_iLastTick > 0 && iTick < m_iLastTick - 5)
+		bReset = true;
+	if (flCurTime > m_flTimedFlipNext + 100.f)
+		bReset = true;
+	if (flCurTime > m_flPitchUltraNext + 100.f && m_flPitchUltraNext > 0.f)
+		bReset = true;
+	for (int i = 0; i < 2; i++)
+	{
+		if (m_flUltraNextChange[i] > 0.f && flCurTime > m_flUltraNextChange[i] + 100.f)
+			bReset = true;
+		if (m_iTornadoRetune[i] > 0 && iTick > m_iTornadoRetune[i] + 1000)
+			bReset = true;
+		if (m_iQuantumShift[i] > 0 && iTick > m_iQuantumShift[i] + 1000)
+			bReset = true;
+	}
+	m_flLastCurTime = flCurTime;
+	m_iLastTick = iTick;
+	if (bReset)
+	{
+		ResetState();
+		return true;
+	}
+	return false;
+}
+
+void CAntiAim::OnLevelInit()
+{
+	ResetState();
+	m_flLastCurTime = 0.f;
+	m_iLastTick = 0;
+	vRealAngles = vFakeAngles = {};
+	vEdgeTrace.clear();
 }
 
 
@@ -91,13 +162,12 @@ static inline int GetEdge(CTFPlayer* pEntity, const float flYaw)
 	return flEdgeLeftDist > flEdgeRightDist ? -1 : 1;
 }
 
-static inline int GetJitter(uint32_t uHash)
+int CAntiAim::GetJitter(uint32_t uHash)
 {
-	static std::unordered_map<uint32_t, bool> mJitter = {};
-
 	if (!I::ClientState->chokedcommands)
-		mJitter[uHash] = !mJitter[uHash];
-	return mJitter[uHash] ? 1 : -1;
+		m_mJitter[uHash] = !m_mJitter[uHash];
+	auto it = m_mJitter.find(uHash);
+	return (it != m_mJitter.end() && it->second) ? 1 : -1;
 }
 
 float CAntiAim::GetYawOffset(CTFPlayer* pEntity, bool bFake)
@@ -114,6 +184,104 @@ float CAntiAim::GetYawOffset(CTFPlayer* pEntity, bool bFake)
 	case Vars::AntiAim::YawEnum::Edge: return (bFake ? Vars::AntiAim::FakeYawValue.Value : Vars::AntiAim::RealYawValue.Value) * GetEdge(pEntity, I::EngineClient->GetViewAngles().y);
 	case Vars::AntiAim::YawEnum::Jitter: return (bFake ? Vars::AntiAim::FakeYawValue.Value : Vars::AntiAim::RealYawValue.Value) * iJitter;
 	case Vars::AntiAim::YawEnum::Spin: return fmod(I::GlobalVars->tickcount * Vars::AntiAim::SpinSpeed.Value + 180.f, 360.f) - 180.f;
+	case Vars::AntiAim::YawEnum::Random: return SDK::RandomFloat(-180.f, 180.f);
+	case Vars::AntiAim::YawEnum::Wiggle: return (sin(I::GlobalVars->tickcount * Vars::AntiAim::SpinSpeed.Value * 0.1f) * 90.f);
+	case Vars::AntiAim::YawEnum::Mercedes:
+	{
+		int iStep = I::GlobalVars->tickcount % 3;
+		return (iStep == 1 ? 120.f : (iStep == 2 ? -120.f : 0.f));
+	}
+	case Vars::AntiAim::YawEnum::Star:
+	{
+		int iStep = I::GlobalVars->tickcount % 5;
+		return (iStep == 1 ? 72.f : (iStep == 2 ? 144.f : (iStep == 3 ? -144.f : (iStep == 4 ? -72.f : 0.f))));
+	}
+	case Vars::AntiAim::YawEnum::UltraRandom:
+	{
+		int i = bFake ? 1 : 0;
+		float flCurTime = I::GlobalVars->curtime;
+
+		if (flCurTime > m_flUltraNextChange[i])
+		{
+			m_flUltraNextChange[i] = flCurTime + SDK::RandomFloat(0.5f, 5.f);
+			m_bUltraSpin[i] = SDK::RandomInt(0, 1);
+			if (m_bUltraSpin[i])
+				m_flUltraSpinSpeed[i] = SDK::RandomFloat(-30.f, 30.f);
+			else
+				m_flUltraYawOffset[i] = SDK::RandomFloat(-180.f, 180.f);
+		}
+
+		if (m_bUltraSpin[i])
+			return fmod(I::GlobalVars->tickcount * m_flUltraSpinSpeed[i] + 180.f, 360.f) - 180.f;
+		else
+			return m_flUltraYawOffset[i];
+	}
+	case Vars::AntiAim::YawEnum::Sideways:
+	{
+		if (bFake)
+			m_bSideways = !m_bSideways;
+		return m_bSideways ? 90.f : -90.f;
+	}
+	case Vars::AntiAim::YawEnum::Omega:
+	{
+		if (bFake)
+		{
+			m_flOmegaYaw = Math::NormalizeAngle(m_flOmegaYaw + SDK::RandomFloat(-30.f, 30.f));
+			return m_flOmegaYaw;
+		}
+		return Math::NormalizeAngle(m_flOmegaYaw - 180.f + SDK::RandomFloat(-40.f, 40.f));
+	}
+	case Vars::AntiAim::YawEnum::RandomUnclamped: return SDK::RandomFloat(-65536.f, 65536.f);
+	case Vars::AntiAim::YawEnum::Heck: return SDK::RandomFloat(-359999.97f, 359999.97f);
+	case Vars::AntiAim::YawEnum::Tornado:
+	{
+		const int i = bFake ? 1 : 0;
+		const int iTick = I::GlobalVars->tickcount;
+		if (iTick >= m_iTornadoRetune[i] || !m_flTornadoSpeed[i])
+		{
+			m_iTornadoRetune[i] = iTick + SDK::RandomInt(8, 24);
+			const float flBaseSpeed = fmaxf(5.f, fabsf(Vars::AntiAim::SpinSpeed.Value));
+			m_flTornadoSpeed[i] = SDK::RandomFloat(flBaseSpeed, flBaseSpeed * 3.f) * (SDK::RandomInt(0, 1) ? 1.f : -1.f);
+		}
+
+		m_flTornadoYaw[i] = Math::NormalizeAngle(m_flTornadoYaw[i] + m_flTornadoSpeed[i]);
+		return Math::NormalizeAngle(m_flTornadoYaw[i] + sinf(iTick * 0.28f + i * 0.7f) * 35.f);
+	}
+	case Vars::AntiAim::YawEnum::Pulse:
+	{
+		float flBase = 0.f;
+		switch ((I::GlobalVars->tickcount / 6 + (bFake ? 1 : 0)) % 4)
+		{
+		case 0: flBase = 0.f; break;
+		case 1: flBase = 180.f; break;
+		case 2: flBase = 90.f; break;
+		default: flBase = -90.f; break;
+		}
+		return Math::NormalizeAngle(flBase + SDK::RandomFloat(-15.f, 15.f));
+	}
+	case Vars::AntiAim::YawEnum::Helix:
+	{
+		const int i = bFake ? 1 : 0;
+		const float flStep = fmaxf(0.01f, fabsf(Vars::AntiAim::SpinSpeed.Value) * 0.006f);
+		m_flHelixPhase[i] += flStep + (bFake ? 0.07f : 0.05f);
+
+		const float flYaw = sinf(m_flHelixPhase[i] * 2.3f) * 125.f + cosf(m_flHelixPhase[i] * 1.1f) * 35.f;
+		return Math::NormalizeAngle(flYaw);
+	}
+	case Vars::AntiAim::YawEnum::Quantum:
+	{
+		static constexpr float arrQuantumAngles[8] = { -180.f, -135.f, -90.f, -45.f, 0.f, 45.f, 90.f, 135.f };
+
+		const int i = bFake ? 1 : 0;
+		const int iTick = I::GlobalVars->tickcount;
+		if (iTick >= m_iQuantumShift[i])
+		{
+			m_iQuantumShift[i] = iTick + SDK::RandomInt(2, 7);
+			m_flQuantumYaw[i] = arrQuantumAngles[SDK::RandomInt(0, 7)];
+		}
+
+		return Math::NormalizeAngle(m_flQuantumYaw[i] + SDK::RandomFloat(-25.f, 25.f));
+	}
 	}
 	return 0.f;
 }
@@ -167,6 +335,89 @@ float CAntiAim::GetPitch(float flCurPitch)
 	case Vars::AntiAim::PitchRealEnum::Zero: flRealPitch = 0.f; break;
 	case Vars::AntiAim::PitchRealEnum::Jitter: flRealPitch = -89.f * iJitter; break;
 	case Vars::AntiAim::PitchRealEnum::ReverseJitter: flRealPitch = 89.f * iJitter; break;
+	case Vars::AntiAim::PitchRealEnum::HalfUp: flRealPitch = -45.f; break;
+	case Vars::AntiAim::PitchRealEnum::HalfDown: flRealPitch = 45.f; break;
+	case Vars::AntiAim::PitchRealEnum::Random: flRealPitch = SDK::RandomFloat(-89.f, 89.f); break;
+	case Vars::AntiAim::PitchRealEnum::Spin: flRealPitch = fmod(I::GlobalVars->tickcount * Vars::AntiAim::SpinSpeed.Value + 180.f, 360.f) - 180.f; break;
+	case Vars::AntiAim::PitchRealEnum::UltraRandom:
+	{
+		if (I::GlobalVars->curtime > m_flPitchUltraNext)
+		{
+			m_flPitchUltraNext = I::GlobalVars->curtime + SDK::RandomFloat(0.5f, 5.f);
+			m_flPitchUltra = SDK::RandomFloat(-89.f, 89.f);
+		}
+		flRealPitch = m_flPitchUltra;
+		break;
+	}
+	case Vars::AntiAim::PitchRealEnum::Heck: flRealPitch = SDK::RandomFloat(-149489.97f, 149489.97f); break;
+	case Vars::AntiAim::PitchRealEnum::Saw:
+	{
+		const float flProgress = fmodf(I::GlobalVars->tickcount * 0.035f, 2.f);
+		flRealPitch = flProgress < 1.f ? -89.f + flProgress * 178.f : 89.f - (flProgress - 1.f) * 178.f;
+		break;
+	}
+	case Vars::AntiAim::PitchRealEnum::Moonwalk:
+	{
+		static constexpr float arrPitches[5] = { -89.f, 89.f, -45.f, 45.f, 0.f };
+
+		const int iTick = I::GlobalVars->tickcount;
+		if (iTick >= m_iMoonwalkNext)
+		{
+			m_iMoonwalkNext = iTick + SDK::RandomInt(2, 8);
+			m_flMoonwalkPitch = arrPitches[SDK::RandomInt(0, 4)];
+		}
+
+		flRealPitch = m_flMoonwalkPitch;
+		break;
+	}
+	case Vars::AntiAim::PitchRealEnum::TimedFlip:
+	{
+		const float flCurTime = I::GlobalVars->curtime;
+
+		if (m_flTimedFlipNext < flCurTime - 15.f)
+		{
+			m_flTimedFlipNext = 0.f;
+			m_bTimedFlipUp = false;
+		}
+
+		if (!m_flTimedFlipNext)
+		{
+			m_bTimedFlipUp = true;
+			m_flTimedFlipNext = flCurTime + 3.f;
+		}
+		else if (flCurTime >= m_flTimedFlipNext)
+		{
+			m_bTimedFlipUp = !m_bTimedFlipUp;
+			m_flTimedFlipNext = flCurTime + 3.f;
+		}
+
+		flRealPitch = m_bTimedFlipUp ? -89.f : 89.f;
+		break;
+	}
+	case Vars::AntiAim::PitchRealEnum::TimedFlipRandom:
+	{
+		const float flCurTime = I::GlobalVars->curtime;
+
+		if (m_flTimedFlipRandNext < flCurTime - 15.f)
+		{
+			m_flTimedFlipRandNext = 0.f;
+			m_bTimedFlipRandUp = false;
+		}
+
+		if (!m_flTimedFlipRandNext)
+		{
+			m_bTimedFlipRandUp = true;
+			m_flTimedFlipRandNext = flCurTime + SDK::RandomFloat(3.f, 10.f);
+		}
+		else if (flCurTime >= m_flTimedFlipRandNext)
+		{
+			m_bTimedFlipRandUp = !m_bTimedFlipRandUp;
+			m_flTimedFlipRandNext = flCurTime + SDK::RandomFloat(3.f, 10.f);
+		}
+
+		flRealPitch = m_bTimedFlipRandUp ? -89.f : 89.f;
+		break;
+	}
 	}
 
 	switch (Vars::AntiAim::PitchFake.Value)
@@ -175,10 +426,42 @@ float CAntiAim::GetPitch(float flCurPitch)
 	case Vars::AntiAim::PitchFakeEnum::Down: flFakePitch = 89.f; break;
 	case Vars::AntiAim::PitchFakeEnum::Jitter: flFakePitch = -89.f * iJitter; break;
 	case Vars::AntiAim::PitchFakeEnum::ReverseJitter: flFakePitch = 89.f * iJitter; break;
+	case Vars::AntiAim::PitchFakeEnum::HalfUp: flFakePitch = -45.f; break;
+	case Vars::AntiAim::PitchFakeEnum::HalfDown: flFakePitch = 45.f; break;
+	case Vars::AntiAim::PitchFakeEnum::Random: flFakePitch = SDK::RandomFloat(-89.f, 89.f); break;
+	case Vars::AntiAim::PitchFakeEnum::Spin: flFakePitch = fmod(I::GlobalVars->tickcount * Vars::AntiAim::SpinSpeed.Value + 180.f, 360.f) - 180.f; break;
+	case Vars::AntiAim::PitchFakeEnum::UltraRandom:
+	{
+		if (I::GlobalVars->curtime > m_flPitchUltraNextFake)
+		{
+			m_flPitchUltraNextFake = I::GlobalVars->curtime + SDK::RandomFloat(0.5f, 5.f);
+			m_flPitchUltraFake = SDK::RandomFloat(-89.f, 89.f);
+		}
+		flFakePitch = m_flPitchUltraFake;
+		break;
+	}
+	case Vars::AntiAim::PitchFakeEnum::Inverse: break;
+	case Vars::AntiAim::PitchFakeEnum::Mirror: break;
+	}
+
+	if (Vars::AntiAim::PitchFake.Value == Vars::AntiAim::PitchFakeEnum::Mirror)
+	{
+		float flPitch = -(Vars::AntiAim::PitchReal.Value ? flRealPitch : flCurPitch);
+		return flPitch + (flPitch >= 0.f ? 360.f : -360.f);
+	}
+
+	if (Vars::AntiAim::PitchFake.Value == Vars::AntiAim::PitchFakeEnum::Inverse)
+	{
+		float flPitch = Vars::AntiAim::PitchReal.Value ? flRealPitch : flCurPitch;
+		if (flPitch <= -89.f)
+			return flPitch + 360.f;
+		if (flPitch >= 89.f)
+			return flPitch - 360.f;
+		return flPitch;
 	}
 
 	if (Vars::AntiAim::PitchReal.Value && Vars::AntiAim::PitchFake.Value)
-		return flRealPitch + (flFakePitch > 0.f ? 360 : -360);
+		return flRealPitch + (flFakePitch > 0.f ? 360.f : -360.f);
 	else if (Vars::AntiAim::PitchReal.Value)
 		return flRealPitch;
 	else if (Vars::AntiAim::PitchFake.Value)
@@ -194,25 +477,45 @@ void CAntiAim::MinWalk(CTFPlayer* pLocal, CUserCmd* pCmd)
 
 	if (!pCmd->forwardmove && !pCmd->sidemove && pLocal->m_vecVelocity().Length2D() < 2.f)
 	{
-		static bool bVar = true;
-		float flMove = (pLocal->IsDucking() ? 3 : 1) * ((bVar = !bVar) ? 1 : -1);
+		float flMove = (pLocal->IsDucking() ? 3 : 1) * ((m_bMinWalkVar = !m_bMinWalkVar) ? 1 : -1);
 		Vec3 vDir = { flMove, flMove, 0 };
 
-		Vec3 vMove = Math::RotatePoint(vDir, {}, { 0, -pCmd->viewangles.y, 0 });
-		pCmd->forwardmove = vMove.x * (fmodf(fabsf(pCmd->viewangles.x), 180.f) > 90.f ? -1 : 1);
+		float flYaw = Math::NormalizeAngle(pCmd->viewangles.y);
+		Vec3 vMove = Math::RotatePoint(vDir, {}, { 0, -flYaw, 0 });
+		float flPitchNorm = Math::NormalizeAngle(pCmd->viewangles.x);
+		pCmd->forwardmove = vMove.x * (fabsf(flPitchNorm) > 90.f ? -1 : 1);
 		pCmd->sidemove = -vMove.y;
-
-		pLocal->m_vecVelocity() = { 1, 1 }; // a bit stupid but it's probably fine
 	}
 }
 
 
 
-void CAntiAim::Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd, bool bSendPacket)
+void CAntiAim::Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd)
 {
-	G::AntiAim = AntiAimOn() && ShouldRun(pLocal, pWeapon, pCmd);
+	CheckAndResetTime();
+	static bool bAutoEnabled = false;
+	const bool bTauntSpinActive = Vars::AntiAim::TauntSpin.Value && pLocal->IsTaunting();
+	if (bTauntSpinActive && !Vars::AntiAim::Enabled.Value)
+	{
+		Vars::AntiAim::Enabled.Value = true;
+		bAutoEnabled = true;
+	}
+	else if (!bTauntSpinActive && bAutoEnabled)
+	{
+		Vars::AntiAim::Enabled.Value = false;
+		bAutoEnabled = false;
+	}
 
-	int iAntiBackstab = F::Misc.AntiBackstab(pLocal, pCmd, bSendPacket);
+	G::AntiAim = AntiAimOn() && ShouldRun(pLocal, pWeapon, pCmd);
+	if (F::Misc.IsDuckSpeedActive())
+	{
+		G::AntiAim = false;
+		vRealAngles = { pCmd->viewangles.x, pCmd->viewangles.y };
+		vFakeAngles = { pCmd->viewangles.x, pCmd->viewangles.y };
+		return;
+	}
+
+	int iAntiBackstab = F::Misc.AntiBackstab(pLocal, pCmd);
 	if (!iAntiBackstab)
 		FakeShotAngles(pLocal, pWeapon, pCmd);
 
@@ -225,13 +528,15 @@ void CAntiAim::Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd, bo
 
 	vEdgeTrace.clear();
 
-	Vec2& vAngles = bSendPacket ? vFakeAngles : vRealAngles;
+	Vec2& vAngles = G::SendPacket ? vFakeAngles : vRealAngles;
 	vAngles.x = iAntiBackstab != 2 ? GetPitch(pCmd->viewangles.x) : pCmd->viewangles.x;
-	vAngles.y = !iAntiBackstab ? GetYaw(pLocal, pCmd, bSendPacket) : pCmd->viewangles.y;
+	vAngles.y = !iAntiBackstab ? GetYaw(pLocal, pCmd, G::SendPacket) : pCmd->viewangles.y;
 
 	if (F::AntiCheatCompatibility.Active())
 		Math::ClampAngles(vAngles);
-	SDK::FixMovement(pCmd, vAngles);
+
+	Vec2 vFix = { Math::NormalizeAngle(vAngles.x), Math::NormalizeAngle(vAngles.y) };
+	SDK::FixMovement(pCmd, vFix);
 	pCmd->viewangles.x = vAngles.x;
 	pCmd->viewangles.y = vAngles.y;
 

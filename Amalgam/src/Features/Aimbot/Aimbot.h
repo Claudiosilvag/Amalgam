@@ -19,8 +19,9 @@ public:
 	void Draw(CTFPlayer* pLocal);
 	void Store(CBaseEntity* pEntity, size_t iSize);
 	void Store(bool bFrameStageNotify = true);
+	float GetSmoothStrength(const Vec3& vCurAngle, const Vec3& vToAngle) const;
 
-	bool m_bRan = false;
+	EWeaponType m_eRanType = EWeaponType::UNKNOWN;
 	bool m_bRunningSecondary = false;
 
 	std::unordered_map<int, RealPath_t> m_mRealPaths = {};

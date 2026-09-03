@@ -2,34 +2,82 @@
 
 #include "../Aimbot.h"
 #include "../../Players/PlayerUtils.h"
+#include "../../Misc/NamedPipe/NamedPipe.h"
 #include "../../Ticks/Ticks.h"
 #include "../../EnginePrediction/EnginePrediction.h"
+#include "../../NavBot/NavBotJobs/NavBotJobs.h"
+#include "../../Followbot/Followbot.h"
+#include "../AutoHeal/AutoHeal.h"
+
+inline int GetPriorityIdx(CTFWeaponBase* pWeapon)
+{
+	if (pWeapon->GetSlot() != SLOT_MELEE)
+	{
+		if (F::AutoHeal.m_iAutoSwitch)
+			return F::AutoHeal.m_iTargetIdx;
+	}
+
+	return -1;
+}
 
 std::vector<Target_t> CAimbotGlobal::ManageTargets(std::vector<Target_t>(*GetTargets)(CTFPlayer* pLocal, CTFWeaponBase* pWeapon), CTFPlayer* pLocal, CTFWeaponBase* pWeapon,
 	int iMethod, int iMaxTargets)
 {
 	auto vTargets = GetTargets(pLocal, pWeapon);
 	SortTargetsPre(vTargets, iMethod);
+
+	int iPriorityIdx = GetPriorityIdx(pWeapon);
+	if (iPriorityIdx > 0)
+	{
+		std::sort((vTargets).begin(), (vTargets).end(), [&](const Target_t& a, const Target_t& b) -> bool
+			{
+				return a.m_pEntity->entindex() == iPriorityIdx;
+			});
+	}
 	vTargets.resize(std::min(size_t(iMaxTargets), vTargets.size()));
-	SortTargetsPost(vTargets, iMethod);
+	if (iPriorityIdx <= 0)
+		SortTargetsPost(vTargets, iMethod);
 	return vTargets;
+}
+
+static int GetTargetHealth(CBaseEntity* pEntity)
+{
+	if (!pEntity)
+		return 0;
+	if (pEntity->IsPlayer())
+		return pEntity->As<CBasePlayer>()->m_iHealth();
+	if (pEntity->IsBuilding())
+		return pEntity->As<CBaseObject>()->m_iHealth();
+	return 0;
 }
 
 void CAimbotGlobal::SortTargetsPre(std::vector<Target_t>& vTargets, int iMethod)
 {
 	switch (iMethod)
 	{
-	case Vars::Aimbot::General::TargetSelectionEnum::FOV:
+	case Vars::Aimbot::General::TargetSelectionHitscanEnum::FOV:
 		std::sort(vTargets.begin(), vTargets.end(), [&](const Target_t& a, const Target_t& b) -> bool
 		{
 			return a.m_flFOVTo < b.m_flFOVTo;
 		});
 		break;
-	case Vars::Aimbot::General::TargetSelectionEnum::Distance:
-	case Vars::Aimbot::General::TargetSelectionEnum::Hybrid:
+	case Vars::Aimbot::General::TargetSelectionHitscanEnum::Distance:
+	case Vars::Aimbot::General::TargetSelectionHitscanEnum::Hybrid:
 		std::sort(vTargets.begin(), vTargets.end(), [&](const Target_t& a, const Target_t& b) -> bool
 		{
 			return a.m_flDistTo < b.m_flDistTo;
+		});
+		break;
+	case Vars::Aimbot::General::TargetSelectionHitscanEnum::MostHealth:
+		std::sort(vTargets.begin(), vTargets.end(), [&](const Target_t& a, const Target_t& b) -> bool
+		{
+			return GetTargetHealth(a.m_pEntity) > GetTargetHealth(b.m_pEntity);
+		});
+		break;
+	case Vars::Aimbot::General::TargetSelectionHitscanEnum::LeastHealth:
+		std::sort(vTargets.begin(), vTargets.end(), [&](const Target_t& a, const Target_t& b) -> bool
+		{
+			return GetTargetHealth(a.m_pEntity) < GetTargetHealth(b.m_pEntity);
 		});
 		break;
 	}
@@ -39,7 +87,7 @@ void CAimbotGlobal::SortTargetsPost(std::vector<Target_t>& vTargets, int iMethod
 {
 	switch (iMethod)
 	{
-	case Vars::Aimbot::General::TargetSelectionEnum::Hybrid:
+	case Vars::Aimbot::General::TargetSelectionHitscanEnum::Hybrid:
 		std::sort(vTargets.begin(), vTargets.end(), [&](const Target_t& a, const Target_t& b) -> bool
 		{
 			return a.m_flFOVTo < b.m_flFOVTo;
@@ -55,7 +103,7 @@ void CAimbotGlobal::SortTargetsPost(std::vector<Target_t>& vTargets, int iMethod
 
 float CAimbotGlobal::GetAimFOV()
 {	// restrict now vs later
-	return Vars::Aimbot::General::LeadAndRestrict.Value ? 180.f : Vars::Aimbot::General::AimFOV.Value;
+	return Vars::Aimbot::General::LeadAndRestrict.Value ? 180.f : std::min(Vars::Aimbot::General::AimFOV.Value, 180.f);
 }
 
 bool CAimbotGlobal::EntityCenterInFOV(CBaseEntity* pTarget, const Vec3& vLocalPos, const Vec3& vLocalAngles, float& flFOVTo, Vec3& vPos, Vec3& vAngleTo)
@@ -64,7 +112,7 @@ bool CAimbotGlobal::EntityCenterInFOV(CBaseEntity* pTarget, const Vec3& vLocalPo
 	vAngleTo = Math::CalcAngle(vLocalPos, vPos);
 	flFOVTo = Math::CalcFov(vLocalAngles, vAngleTo);
 
-	return flFOVTo < GetAimFOV();
+	return flFOVTo <= GetAimFOV();
 }
 
 bool CAimbotGlobal::PlayerBoneInFOV(CTFPlayer* pTarget, const Vec3& vLocalPos, const Vec3& vLocalAngles, float& flFOVTo, Vec3& vPos, Vec3& vAngleTo, int iHitboxes)
@@ -92,7 +140,7 @@ bool CAimbotGlobal::PlayerBoneInFOV(CTFPlayer* pTarget, const Vec3& vLocalPos, c
 	if (!aBones)
 		return false;
 
-	float flMinFOV = 180.f;
+	float flMinFOV = std::numeric_limits<float>::max();
 	for (int nHitbox = 0; nHitbox < pTarget->GetNumOfHitboxes(); nHitbox++)
 	{
 		if (!IsHitboxValid(pTarget, nHitbox, iHitboxes))
@@ -110,7 +158,7 @@ bool CAimbotGlobal::PlayerBoneInFOV(CTFPlayer* pTarget, const Vec3& vLocalPos, c
 		}
 	}
 
-	return flMinFOV < GetAimFOV();
+	return flMinFOV <= GetAimFOV();
 }
 
 bool CAimbotGlobal::IsHitboxValid(CBaseEntity* pEntity, int nHitbox, int iHitboxes)
@@ -191,7 +239,7 @@ bool CAimbotGlobal::ShouldAimAtAngle(Vec3 vAngles)
 	if (!Vars::Aimbot::General::LeadAndRestrict.Value)
 		return true;
 
-	return Math::CalcFov(I::EngineClient->GetViewAngles(), vAngles) < Vars::Aimbot::General::AimFOV.Value;
+	return Math::CalcFov(I::EngineClient->GetViewAngles(), vAngles) <= std::min(Vars::Aimbot::General::AimFOV.Value, 180.f);
 }
 
 bool CAimbotGlobal::ShouldIgnore(CBaseEntity* pEntity, CTFPlayer* pLocal, CTFWeaponBase* pWeapon, int iFunctionFlags, int iTargetFlags, int iIgnoreFlags)
@@ -216,6 +264,19 @@ bool CAimbotGlobal::ShouldIgnore(CBaseEntity* pEntity, CTFPlayer* pLocal, CTFWea
 		if (!SDK::FriendlyFire() && pLocal->m_iTeamNum() == pEntity->m_iTeamNum())
 			return false;
 
+#ifdef TEXTMODE
+		auto pResource = H::Entities.GetResource();
+		if (pResource && F::NamedPipe.IsLocalBot(pResource->m_iAccountID(pEntity->entindex())))
+			return true;
+#endif
+
+		if (iIgnoreFlags & Vars::Aimbot::General::IgnoreEnum::SentryBusters)
+		{
+			uint32_t uModel = H::Entities.GetModel(pPlayer->entindex());
+			if (uModel == FNV1A::Hash32Const("models/bots/demo/bot_sentry_buster.mdl"))
+				return true;
+		}
+
 		if (iFunctionFlags & ShouldIgnoreEnum::Ignored && F::PlayerUtils.IsIgnored(pPlayer->entindex())
 			|| iIgnoreFlags & Vars::Aimbot::General::IgnoreEnum::Unprioritized && !F::PlayerUtils.IsPrioritized(pPlayer->entindex()))
 			return true;
@@ -228,12 +289,13 @@ bool CAimbotGlobal::ShouldIgnore(CBaseEntity* pEntity, CTFPlayer* pLocal, CTFWea
 			|| iIgnoreFlags & Vars::Aimbot::General::IgnoreEnum::Taunting && pPlayer->IsTaunting()
 			|| iIgnoreFlags & Vars::Aimbot::General::IgnoreEnum::Disguised && pPlayer->InCond(TF_COND_DISGUISED))
 			return true;
+
 		if (iIgnoreFlags & Vars::Aimbot::General::IgnoreEnum::Vaccinator)
 		{
 			switch (G::PrimaryWeaponType)
 			{
 			case EWeaponType::HITSCAN:
-				if (pPlayer->InCond(TF_COND_MEDIGUN_UBER_BULLET_RESIST) && SDK::AttribHookValue(0, "mod_pierce_resists_absorbs", pWeapon) != 0)
+				if (pPlayer->InCond(TF_COND_MEDIGUN_UBER_BULLET_RESIST) && SDK::AttribHookValue(0, "mod_pierce_resists_absorbs", pWeapon) == 0)
 					return true;
 				break;
 			case EWeaponType::PROJECTILE:
@@ -293,7 +355,8 @@ bool CAimbotGlobal::ShouldIgnore(CBaseEntity* pEntity, CTFPlayer* pLocal, CTFWea
 			return true;
 
 		if (auto pOwner = pProjectile->m_hThrower().Get();
-			iFunctionFlags& ShouldIgnoreEnum::Ignored && pOwner && F::PlayerUtils.IsIgnored(pOwner->entindex()))
+			iFunctionFlags & ShouldIgnoreEnum::Ignored && pOwner
+			&& F::PlayerUtils.IsIgnored(pOwner->entindex()))
 			return true;
 
 		if (pProjectile->m_iType() != TF_GL_MODE_REMOTE_DETONATE || !pProjectile->m_bTouched())
@@ -336,7 +399,19 @@ bool CAimbotGlobal::ShouldIgnore(CBaseEntity* pEntity, CTFPlayer* pLocal, CTFWea
 
 int CAimbotGlobal::GetPriority(int iIndex)
 {
-	return F::PlayerUtils.GetPriority(iIndex);
+	int iPriority = F::PlayerUtils.GetPriority(iIndex);
+
+	if (Vars::Aimbot::Hitscan::Modifiers.Value & Vars::Aimbot::Hitscan::ModifiersEnum::PreferMedics)
+	{
+		auto pPlayer = I::ClientEntityList->GetClientEntity(iIndex)->As<CTFPlayer>();
+		auto pLocal = H::Entities.GetLocal();
+		if (pPlayer && pLocal && pPlayer->IsPlayer() && pPlayer->IsAlive()
+			&& pPlayer->m_iTeamNum() != pLocal->m_iTeamNum()
+			&& pPlayer->m_iClass() == TF_CLASS_MEDIC)
+			iPriority += 10;
+	}
+
+	return iPriority;
 }
 
 bool CAimbotGlobal::ShouldAim()

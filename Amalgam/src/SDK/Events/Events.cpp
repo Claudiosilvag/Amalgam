@@ -10,11 +10,19 @@
 #include "../../Features/Output/Output.h"
 #include "../../Features/Resolver/Resolver.h"
 #include "../../Features/Visuals/Visuals.h"
+#include "../../Features/Killstreak/Killstreak.h"
+#include "../../Features/NavBot/NavEngine/NavEngine.h"
+#include "../../Features/NavBot/NavBotJobs/NavBotJobs.h"
+#include "../../Features/Commands/Commands.h"
+#ifdef TEXTMODE
+#include "../../Features/Misc/NamedPipe/NamedPipe.h"
+#endif
+
 
 bool CEventListener::Initialize()
 {
-	std::vector<const char*> vEvents = { 
-		"client_beginconnect", "client_connected", "client_disconnect", "game_newmap", "teamplay_round_start", "scorestats_accumulated_update", "mvm_reset_stats", "player_connect_client", "player_spawn", "player_changeclass", "player_hurt", "vote_cast", "item_pickup", "revive_player_notify"
+	std::vector<const char*> vEvents = {
+		"client_beginconnect", "client_connected", "client_disconnect", "game_newmap", "teamplay_round_start", "scorestats_accumulated_update", "mvm_reset_stats", "mvm_wave_complete", "player_connect_client", "player_spawn", "player_changeclass", "player_hurt", "player_death", "vote_cast", "vote_maps_changed", "item_pickup", "revive_player_notify", "party_chat"
 	};
 
 	for (auto szEvent : vEvents)
@@ -23,6 +31,9 @@ bool CEventListener::Initialize()
 
 		if (!I::GameEventManager->FindListener(this, szEvent))
 		{
+			if (!strcmp(szEvent, "party_chat")) // depends on game state, not critical
+				continue;
+
 			U::Core.AppendFailText(std::format("Failed to add listener: {}", szEvent).c_str());
 			m_bFailed = true;
 		}
@@ -38,8 +49,10 @@ void CEventListener::Unload()
 
 void CEventListener::FireGameEvent(IGameEvent* pEvent)
 {
-	if (!pEvent)
+	if (!pEvent || G::Unload)
 		return;
+
+	static bool bAutoAbandonedMannUp = false;
 
 	auto pLocal = H::Entities.GetLocal();
 	auto uHash = FNV1A::Hash32(pEvent->GetName());
@@ -51,9 +64,44 @@ void CEventListener::FireGameEvent(IGameEvent* pEvent)
 	F::CritHack.Event(pEvent, uHash, pLocal);
 	F::AutoHeal.Event(pEvent, uHash);
 	F::Misc.Event(pEvent, uHash);
+#ifndef TEXTMODE
 	F::Visuals.Event(pEvent, uHash);
+#else
+	F::NamedPipe.Event(pEvent, uHash);
+#endif
 	switch (uHash)
 	{
+	case FNV1A::Hash32Const("client_disconnect"):
+	case FNV1A::Hash32Const("game_newmap"):
+	case FNV1A::Hash32Const("teamplay_round_start"):
+	case FNV1A::Hash32Const("mvm_reset_stats"):
+	{
+		bAutoAbandonedMannUp = false;
+		return;
+	}
+	case FNV1A::Hash32Const("mvm_wave_complete"):
+	{
+		if (!Vars::Misc::MannVsMachine::AutoAbandonMannUp.Value || bAutoAbandonedMannUp || !I::TFGCClientSystem)
+			return;
+
+		auto pGameRules = I::TFGameRules();
+		if (!pGameRules || !pGameRules->m_bPlayingMannVsMachine() || pGameRules->GetCurrentMatchGroup() != k_eTFMatchGroup_MvM_MannUp)
+			return;
+
+		auto pObjectiveResource = H::Entities.GetObjectiveResource();
+		if (!pObjectiveResource)
+			return;
+
+		int iWave = pObjectiveResource->m_nMannVsMachineWaveCount();
+		int iMaxWave = pObjectiveResource->m_nMannVsMachineMaxWaveCount();
+		int iCompletedWave = pObjectiveResource->m_bMannVsMachineBetweenWaves() && iWave > 1 ? iWave - 1 : iWave;
+		if (iMaxWave <= 1 || iCompletedWave != iMaxWave - 1)
+			return;
+
+		bAutoAbandonedMannUp = true;
+		I::TFGCClientSystem->AbandonCurrentMatch();
+		return;
+	}
 	case FNV1A::Hash32Const("player_hurt"):
 	{
 		F::Resolver.PlayerHurt(pEvent);
@@ -66,6 +114,21 @@ void CEventListener::FireGameEvent(IGameEvent* pEvent)
 			return;
 
 		F::Backtrack.SetLerp();
+#ifndef TEXTMODE
+		F::Killstreak.PlayerSpawn(pEvent);
+#endif
+		F::NavEngine.CancelPath();
+		F::NavBotDanger.ResetSpawn();
+		F::NavBotMVMSniper.Reset();
+		return;
+	}
+	case FNV1A::Hash32Const("party_chat"):
+	{
+		if (pEvent->GetInt("type") != 1) // k_eTFPartyChatType_MemberChat
+			return;
+
+		const uint64_t uSteamID = std::strtoull(pEvent->GetString("steamid"), nullptr, 10);
+		F::Commands.RunChat(pEvent->GetString("text"), uint32_t(uSteamID & 0xFFFFFFFFull), true);
 		return;
 	}
 	case FNV1A::Hash32Const("revive_player_notify"):

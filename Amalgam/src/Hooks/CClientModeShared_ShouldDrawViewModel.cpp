@@ -7,6 +7,9 @@ MAKE_HOOK(CClientModeShared_ShouldDrawViewModel, U::Memory.GetVirtual(I::ClientM
 {
 	DEBUG_RETURN(CClientModeShared_ShouldDrawViewModel, rcx);
 
+#ifdef TEXTMODE
+	return false;
+#else
 	if (Vars::Visuals::UI::ZoomFieldOfView.Value)
 	{
 		auto pLocal = H::Entities.GetLocal();
@@ -15,4 +18,5 @@ MAKE_HOOK(CClientModeShared_ShouldDrawViewModel, U::Memory.GetVirtual(I::ClientM
 	}
 
 	return CALL_ORIGINAL(rcx);
+#endif
 }

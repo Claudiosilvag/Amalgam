@@ -14,6 +14,7 @@ MAKE_SIGNATURE(CBaseEntity_SetAbsVelocity, "client.dll", "48 89 5C 24 ? 57 48 83
 MAKE_SIGNATURE(CBaseEntity_EstimateAbsVelocity, "client.dll", "48 89 5C 24 ? 57 48 83 EC ? 48 8B FA 48 8B D9 E8 ? ? ? ? 48 3B D8", 0x0);
 MAKE_SIGNATURE(CBaseEntity_CreateShadow, "client.dll", "48 89 5C 24 ? 57 48 83 EC ? 48 8B 41 ? 48 8B F9 48 83 C1 ? FF 90", 0x0);
 MAKE_SIGNATURE(CBaseEntity_InvalidateBoneCache, "client.dll", "8B 05 ? ? ? ? FF C8 C7 81", 0x0);
+MAKE_SIGNATURE(CBaseEntity_ShouldCollide, "client.dll", "83 B9 ? ? ? ? ? 75 ? 41 C1 E8", 0x0);
 
 enum CollideType_t
 {
@@ -295,6 +296,7 @@ public:
 	VIRTUAL(EyePosition, Vec3, 142, this);
 	VIRTUAL(EyeAngles, Vec3&, 143, this);
 	VIRTUAL(UpdateVisibility, void, 91, this);
+	VIRTUAL_ARGS(ShouldCollide, bool, 146, (int collisionGroup, int contentsMask), this, collisionGroup, contentsMask);
 
 	SIGNATURE_ARGS(SetAbsOrigin, void, CBaseEntity, (const Vec3& vOrigin), this, std::ref(vOrigin));
 	SIGNATURE_ARGS(SetAbsAngles, void, CBaseEntity, (const Vec3& vAngles), this, std::ref(vAngles));

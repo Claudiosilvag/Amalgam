@@ -219,6 +219,74 @@ void CDraw::StringOutlined(const Font_t& tFont, int x, int y, Color_t tColor, Co
 	I::MatSystemSurface->DrawPrintText(wstr, int(wcslen(wstr)));
 }
 
+void CDraw::StringWithBackground(const Font_t& tFont, int x, int y, Color_t tColor, Color_t tColorBg, EAlign eAlign, const char* str)
+{
+	wsprintfW(s_wstr, L"%hs", str);
+
+	const auto dwFont = tFont.m_dwFont;
+
+	int w = 0, h = 0; I::MatSystemSurface->GetTextSize(dwFont, s_wstr, w, h);
+	
+	int padding = Scale(2, Scale_Round);
+	
+	int textX = x, textY = y;
+	switch (eAlign)
+	{
+	case ALIGN_TOPLEFT: break;
+	case ALIGN_TOP: textX -= w / 2; break;
+	case ALIGN_TOPRIGHT: textX -= w; break;
+	case ALIGN_LEFT: textY -= h / 2; break;
+	case ALIGN_CENTER: textX -= w / 2; textY -= h / 2; break;
+	case ALIGN_RIGHT: textX -= w; textY -= h / 2; break;
+	case ALIGN_BOTTOMLEFT: textY -= h; break;
+	case ALIGN_BOTTOM: textX -= w / 2; textY -= h; break;
+	case ALIGN_BOTTOMRIGHT: textX -= w; textY -= h; break;
+	}
+	
+	if (tColorBg.a > 0)
+	{
+		FillRect(textX - padding, textY - padding, w + padding * 2, h + padding * 2, tColorBg);
+	}
+	
+	I::MatSystemSurface->DrawSetTextPos(textX, textY);
+	I::MatSystemSurface->DrawSetTextFont(dwFont);
+	I::MatSystemSurface->DrawSetTextColor(tColor);
+	I::MatSystemSurface->DrawPrintText(s_wstr, int(wcslen(s_wstr)));
+}
+
+void CDraw::StringWithBackground(const Font_t& tFont, int x, int y, Color_t tColor, Color_t tColorBg, EAlign eAlign, const wchar_t* wstr)
+{
+	const auto dwFont = tFont.m_dwFont;
+
+	int w = 0, h = 0; I::MatSystemSurface->GetTextSize(dwFont, wstr, w, h);
+	
+	int padding = Scale(2, Scale_Round);
+	
+	int textX = x, textY = y;
+	switch (eAlign)
+	{
+	case ALIGN_TOPLEFT: break;
+	case ALIGN_TOP: textX -= w / 2; break;
+	case ALIGN_TOPRIGHT: textX -= w; break;
+	case ALIGN_LEFT: textY -= h / 2; break;
+	case ALIGN_CENTER: textX -= w / 2; textY -= h / 2; break;
+	case ALIGN_RIGHT: textX -= w; textY -= h / 2; break;
+	case ALIGN_BOTTOMLEFT: textY -= h; break;
+	case ALIGN_BOTTOM: textX -= w / 2; textY -= h; break;
+	case ALIGN_BOTTOMRIGHT: textX -= w; textY -= h; break;
+	}
+	
+	if (tColorBg.a > 0)
+	{
+		FillRect(textX - padding, textY - padding, w + padding * 2, h + padding * 2, tColorBg);
+	}
+	
+	I::MatSystemSurface->DrawSetTextPos(textX, textY);
+	I::MatSystemSurface->DrawSetTextFont(dwFont);
+	I::MatSystemSurface->DrawSetTextColor(tColor);
+	I::MatSystemSurface->DrawPrintText(wstr, int(wcslen(wstr)));
+}
+
 void CDraw::Line(int x1, int y1, int x2, int y2, Color_t tColor)
 {
 	I::MatSystemSurface->DrawSetColor(tColor);
@@ -596,7 +664,7 @@ void CDraw::RenderTriangle(const Vector& vPoint1, const Vector& vPoint2, const V
 
 void CDraw::RenderSphere(const Vector& vCenter, float flRadius, int nTheta, int nPhi, Color_t tColor, IMaterial* pMaterial)
 {
-	if (!tColor.a)
+	if (!tColor.a || !pMaterial)
 		return;
 
 	S::RenderSphere.Call<void>(std::ref(vCenter), flRadius, nTheta, nPhi, tColor, pMaterial);
@@ -607,9 +675,9 @@ void CDraw::RenderSphere(const Vector& vCenter, float flRadius, int nTheta, int 
 	if (!tColor.a)
 		return;
 
-	static auto pVertexColor = *reinterpret_cast<IMaterial**>(U::Memory.RelToAbs(S::VertexColor()));
-	static auto pVertexColorIgnoreZ = *reinterpret_cast<IMaterial**>(U::Memory.RelToAbs(S::VertexColorIgnoreZ()));
-	auto pMaterial = bZBuffer ? pVertexColor : pVertexColorIgnoreZ;
+	auto pMaterial = *reinterpret_cast<IMaterial**>(U::Memory.RelToAbs(bZBuffer ? S::VertexColor() : S::VertexColorIgnoreZ()));
+	if (!pMaterial)
+		return;
 
 	RenderSphere(vCenter, flRadius, nTheta, nPhi, tColor, pMaterial);
 }
@@ -619,9 +687,9 @@ void CDraw::RenderWireframeSphere(const Vector& vCenter, float flRadius, int nTh
 	if (!tColor.a)
 		return;
 
-	static auto pWireframe = *reinterpret_cast<IMaterial**>(U::Memory.RelToAbs(S::Wireframe()));
-	static auto pWireframeIgnoreZ = *reinterpret_cast<IMaterial**>(U::Memory.RelToAbs(S::WireframeIgnoreZ()));
-	auto pMaterial = bZBuffer ? pWireframe : pWireframeIgnoreZ;
+	auto pMaterial = *reinterpret_cast<IMaterial**>(U::Memory.RelToAbs(bZBuffer ? S::Wireframe() : S::WireframeIgnoreZ()));
+	if (!pMaterial)
+		return;
 
 	RenderSphere(vCenter, flRadius, nTheta, nPhi, tColor, pMaterial);
 }

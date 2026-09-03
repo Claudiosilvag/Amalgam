@@ -7,7 +7,7 @@ class CAutoHeal
 {
 private:
 	void AutoHeal(CUserCmd* pCmd);
-	void ActivateOnVoice(CUserCmd* pCmd);
+	void Activate(CUserCmd* pCmd);
 	void AutoVaccinator(CUserCmd* pCmd);
 	void GetDangers(CTFPlayer* pTarget, bool bVaccinator, float& flBulletDanger, float& flBlastDanger, float& flFireDanger);
 	void SwapResistType(CUserCmd* pCmd, int iType);
@@ -37,6 +37,9 @@ public:
 	void Draw(CTFPlayer* pLocal);
 #endif
 
+	float m_flAutoSwitchExpireTime = 0.f;
+	int m_iAutoSwitch = 0;
+	int m_iTargetIdx = -1;
 	std::unordered_mapset<int> m_mMedicCallers = {};
 };
 

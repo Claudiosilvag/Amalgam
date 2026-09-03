@@ -87,6 +87,7 @@ void CDebug::Draw(CTFPlayer* pLocal)
 		H::Draw.StringOutlined(fFont, x, y += nTall * 2, Vars::Menu::Theme::Active.Value, Vars::Menu::Theme::Background.Value, ALIGN_TOPLEFT, std::format("Origin: ({:.3f}, {:.3f}, {:.3f})", vOrigin.x, vOrigin.y, vOrigin.z).c_str());
 		Vec3 vVelocity = pLocal->m_vecVelocity();
 		H::Draw.StringOutlined(fFont, x, y += nTall, Vars::Menu::Theme::Active.Value, Vars::Menu::Theme::Background.Value, ALIGN_TOPLEFT, std::format("Velocity: {:.3f}, {:.3f} ({:.3f}, {:.3f}, {:.3f})", vVelocity.Length(), vVelocity.Length2D(), vVelocity.x, vVelocity.y, vVelocity.z).c_str());
+		H::Draw.StringOutlined(fFont, x, y += nTall, Vars::Menu::Theme::Active.Value, Vars::Menu::Theme::Background.Value, ALIGN_TOPLEFT, std::format("Ground entity: {}", pLocal->m_hGroundEntity() ? pLocal->m_hGroundEntity()->GetClientClass()->m_pNetworkName : "none").c_str());
 		H::Draw.StringOutlined(fFont, x, y += nTall, Vars::Menu::Theme::Active.Value, Vars::Menu::Theme::Background.Value, ALIGN_TOPLEFT, std::format("Tickbase: {}", pLocal->m_nTickBase()).c_str());
 		//H::Draw.StringOutlined(fFont, x, y += nTall, Vars::Menu::Theme::Active.Value, Vars::Menu::Theme::Background.Value, ALIGN_TOPLEFT, std::format("Choke: {}, {}", G::Choking, I::ClientState->chokedcommands).c_str());
 		//H::Draw.StringOutlined(fFont, x, y += nTall, Vars::Menu::Theme::Active.Value, Vars::Menu::Theme::Background.Value, ALIGN_TOPLEFT, std::format("Ticks: {}, {}", F::Ticks.m_iShiftedTicks, F::Ticks.m_iShiftedGoal).c_str());
@@ -111,6 +112,11 @@ void CDebug::Draw(CTFPlayer* pLocal)
 			H::Draw.StringOutlined(fFont, x, y += nTall, Vars::Menu::Theme::Active.Value, Vars::Menu::Theme::Background.Value, ALIGN_TOPLEFT, std::format("Throw: {}, Smack: {}", G::Throwing, pWeapon->m_flSmackTime()).c_str());
 		}
 		*/
+		H::Draw.StringOutlined(fFont, x, y += nTall * 2, Vars::Menu::Theme::Active.Value, Vars::Menu::Theme::Background.Value, ALIGN_TOPLEFT, std::format("Primary: {}, {}, {}, {}, ({})", G::AmmoInSlot[SLOT_PRIMARY].m_bUsesAmmo, G::AmmoInSlot[SLOT_PRIMARY].m_iClip, G::AmmoInSlot[SLOT_PRIMARY].m_iMaxClip, G::AmmoInSlot[SLOT_PRIMARY].m_iReserve, G::SavedWepSlots[SLOT_PRIMARY]).c_str());
+		H::Draw.StringOutlined(fFont, x, y += nTall, Vars::Menu::Theme::Active.Value, Vars::Menu::Theme::Background.Value, ALIGN_TOPLEFT, std::format("Secondary: {}, {}, {}, {}, ({})", G::AmmoInSlot[SLOT_SECONDARY].m_bUsesAmmo, G::AmmoInSlot[SLOT_SECONDARY].m_iClip, G::AmmoInSlot[SLOT_SECONDARY].m_iMaxClip, G::AmmoInSlot[SLOT_SECONDARY].m_iReserve, G::SavedWepSlots[SLOT_SECONDARY]).c_str());
+		H::Draw.StringOutlined(fFont, x, y += nTall, Vars::Menu::Theme::Active.Value, Vars::Menu::Theme::Background.Value, ALIGN_TOPLEFT, std::format("Melee: {}", G::SavedWepSlots[SLOT_MELEE]).c_str());
+		H::Draw.StringOutlined(fFont, x, y += nTall, Vars::Menu::Theme::Active.Value, Vars::Menu::Theme::Background.Value, ALIGN_TOPLEFT, std::format("PDA1: {}", G::SavedWepSlots[SLOT_PDA1]).c_str());
+		H::Draw.StringOutlined(fFont, x, y += nTall, Vars::Menu::Theme::Active.Value, Vars::Menu::Theme::Background.Value, ALIGN_TOPLEFT, std::format("PDA2: {}", G::SavedWepSlots[SLOT_PDA2]).c_str());
 	}
 
 #ifdef DEBUG_TEXT

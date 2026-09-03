@@ -2,25 +2,27 @@
 #include "../../../SDK/SDK.h"
 
 #include "../AimbotGlobal/AimbotGlobal.h"
+#include <unordered_set>
+#include <optional>
 
 class CAutoDetonate
 {
 private:
-	bool CheckEntity(CBaseEntity* pEntity, CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd, CBaseEntity* pProjectile, float flRadius, Vec3 vOrigin);
-	bool CheckEntities(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd, CBaseEntity* pProjectile, float flRadius, Vec3 vOrigin);
-	bool CheckTargets(CTFPlayer* pLocal, EntityEnum::EntityEnum eGroup, float flRadiusScale, CUserCmd* pCmd);
-	bool CheckSelf(CTFPlayer* pLocal, EntityEnum::EntityEnum eGroup);
-	bool Check(CTFPlayer* pLocal, CUserCmd* pCmd, EntityEnum::EntityEnum eGroup, int iFlag);
+	void PredictPlayer(CBaseEntity* pLocal, CBaseEntity* pTarget, float flLatency);
+	void RestorePlayer(CBaseEntity* pTarget);
 
-	bool GetRadius(EntityEnum::EntityEnum eGroup, CBaseEntity* pProjectile, float& flRadius, CTFWeaponBase*& pWeapon);
-	Vec3 GetOrigin(CBaseEntity* pProjectile, EntityEnum::EntityEnum eGroup, float flLatency = 0.f);
+	void ApplyDamageDebuffs(CBaseEntity* pTarget, float& flDamage, float flDamageNoBuffs);
+	float GetTotalDamageForTarget(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CBaseEntity* pTarget, std::unordered_set<CTFGrenadePipebombProjectile*> vStickies, std::unordered_map<int, Vec3> vPredictedStickyOrigins, std::unordered_map<int, float> vRadiuses, float& flDamageNoBuffs, bool bUseDist = true);
+	float GetTotalDamageOfStickies(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, std::vector<CTFGrenadePipebombProjectile*> vStickies, std::unordered_map<int, float> vRadiuses, float& flDamageNoBuffs);
 
-	void PredictPlayers(CTFPlayer* pLocal, float flLatency = 0.f, bool bLocal = false);
-	void RestorePlayers();
+	bool SkipTarget(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CBaseEntity* pTarget);
+	bool CanKill(CBaseEntity* pTarget, float& flDamage, float flDamageNoBuffs, float& flMaxDamage, float flMaxDamageNoBuffs, int iMaxHealth);
+	bool CanSee(CBaseEntity* pTarget, CBaseEntity* pProjectile, const Vec3 vProjectileOrigin, const float flRadius, Vec3* vOut = nullptr, Vec3* vCustomTargetPos = nullptr) const;
 
-	std::unordered_map<CBaseEntity*, Vec3> m_mRestore = {};
-	std::optional<Vec3> m_vAimPos = {};
+	bool FlareCheck(CTFPlayer* pLocal);
+	bool StickyCheck(CTFPlayer* pLocal, CUserCmd* pCmd);
 
+	std::optional<Vector> m_vRestore;
 public:
 	void Run(CTFPlayer* pLocal, CUserCmd* pCmd);
 };

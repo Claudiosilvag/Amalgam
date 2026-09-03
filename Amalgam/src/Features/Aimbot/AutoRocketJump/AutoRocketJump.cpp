@@ -155,8 +155,7 @@ void CAutoRocketJump::Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* p
 				int iSkip = bCurrGrounded ? Vars::Misc::Movement::AutoRocketJumpSkipGround.Value : Vars::Misc::Movement::AutoRocketJumpSkipAir.Value;
 
 				CGameTrace trace = {};
-				CTraceFilterCollideable filter = {};
-				filter.pSkip = pLocal;
+				CTraceFilterCollideable filter(pLocal);
 
 				Vec3 vNew = F::ProjSim.GetOrigin();
 				for (int n = 1; n < 10; n++)

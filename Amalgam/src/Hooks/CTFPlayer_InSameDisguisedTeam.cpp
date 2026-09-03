@@ -1,3 +1,4 @@
+#ifndef TEXTMODE
 #include "../SDK/SDK.h"
 
 #include "../Features/Spectate/Spectate.h"
@@ -38,3 +39,4 @@ MAKE_HOOK(CTFFreezePanel_FireGameEvent, S::CTFFreezePanel_FireGameEvent(), void,
 
 	CALL_ORIGINAL(rcx, event);
 }
+#endif

@@ -1,16 +1,21 @@
 #include "PlayerCore.h"
 
 #include "PlayerUtils.h"
+#include "SteamProfileCache.h"
 #include "../Configs/Configs.h"
 
 void CPlayerlistCore::Run()
 {
+	F::SteamProfileCache.Pump();
+
 	static Timer tTimer = {};
 	if (!tTimer.Run(1.f))
 		return;
 
 	LoadPlayerlist();
 	SavePlayerlist();
+	LoadCheaterlist();
+	SaveCheaterlist();
 }
 
 void CPlayerlistCore::SavePlayerlist()
@@ -35,6 +40,8 @@ void CPlayerlistCore::SavePlayerlist()
 				F::Configs.SaveJson(tChild, "Name", tTag.m_sName);
 				F::Configs.SaveJson(tChild, "Color", tTag.m_tColor);
 				F::Configs.SaveJson(tChild, "Priority", tTag.m_iPriority);
+				F::Configs.SaveJson(tChild, "FollowPriority", tTag.m_iFollowPriority);
+				F::Configs.SaveJson(tChild, "VotePriority", tTag.m_iVotePriority);
 				F::Configs.SaveJson(tChild, "Label", tTag.m_bLabel);
 
 				tSub.put_child(std::to_string(F::PlayerUtils.IndexToTag(iID)), tChild);
@@ -74,11 +81,11 @@ void CPlayerlistCore::SavePlayerlist()
 
 		write_json(F::Configs.m_sCorePath + "Players.json", tWrite);
 
-		SDK::Output("Amalgam", "Saved playerlist", INFO_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_INFO);
+		SDK::Output("unibox", "Saved playerlist", INFO_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_INFO);
 	}
 	catch (...)
 	{
-		SDK::Output("Amalgam", "Save playerlist failed", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
+		SDK::Output("unibox", "Save playerlist failed", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
 	}
 }
 
@@ -101,12 +108,12 @@ void CPlayerlistCore::LoadPlayerlist()
 		F::PlayerUtils.m_mPlayerTags.clear();
 		F::PlayerUtils.m_mPlayerAliases.clear();
 		F::PlayerUtils.m_vTags = {
-			{ "Default", { 200, 200, 200, 255 }, 0, false, false, true },
-			{ "Ignored", { 200, 200, 200, 255 }, -1, false, true, true },
-			{ "Cheater", { 255, 100, 100, 255 }, 1, false, true, true },
-			{ "Friend", { 100, 255, 100, 255 }, 0, true, false, true },
-			{ "Party", { 100, 50, 255, 255 }, 0, true, false, true },
-			{ "F2P", { 255, 255, 255, 255 }, 0, true, false, true }
+			{ "Default", { 200, 200, 200, 255 }, 0, 0, 0, false, false, true },
+			{ "Ignored", { 200, 200, 200, 255 }, -1, 0, -1, false, true, true },
+			{ "Cheater", { 255, 100, 100, 255 }, 1, 0, 0, false, true, true },
+			{ "Friend", { 100, 255, 100, 255 }, 0, 2, -1, true, false, true },
+			{ "Party", { 100, 100, 255, 255 }, 0, 1, -1, true, false, true },
+			{ "F2P", { 255, 255, 255, 255 }, 0, 0, 0, true, false, true }
 		};
 
 		if (auto tSub = tRead.get_child_optional("Config"))
@@ -117,14 +124,18 @@ void CPlayerlistCore::LoadPlayerlist()
 				F::Configs.LoadJson(tChild, "Name", tTag.m_sName);
 				F::Configs.LoadJson(tChild, "Color", tTag.m_tColor);
 				F::Configs.LoadJson(tChild, "Priority", tTag.m_iPriority);
+				F::Configs.LoadJson(tChild, "FollowPriority", tTag.m_iFollowPriority);
+				F::Configs.LoadJson(tChild, "VotePriority", tTag.m_iVotePriority);
 				F::Configs.LoadJson(tChild, "Label", tTag.m_bLabel);
 
 				int iID = F::PlayerUtils.TagToIndex(std::stoi(sName));
-				if (iID > -1 && iID < F::PlayerUtils.m_vTags.size())
+				if (iID > -1 && iID < F::PlayerUtils.m_vTags.size()) 
 				{
 					F::PlayerUtils.m_vTags[iID].m_sName = tTag.m_sName;
 					F::PlayerUtils.m_vTags[iID].m_tColor = tTag.m_tColor;
 					F::PlayerUtils.m_vTags[iID].m_iPriority = tTag.m_iPriority;
+					F::PlayerUtils.m_vTags[iID].m_iFollowPriority = tTag.m_iFollowPriority;
+					F::PlayerUtils.m_vTags[iID].m_iVotePriority = tTag.m_iVotePriority;
 					F::PlayerUtils.m_vTags[iID].m_bLabel = tTag.m_bLabel;
 				}
 				else
@@ -132,7 +143,7 @@ void CPlayerlistCore::LoadPlayerlist()
 			}
 		}
 		else
-			SDK::Output("Amalgam", "Playerlist config not found", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
+			SDK::Output("unibox", "Playerlist config not found", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
 
 		if (auto tSub = tRead.get_child_optional("Tags"))
 		{
@@ -154,7 +165,7 @@ void CPlayerlistCore::LoadPlayerlist()
 			}
 		}
 		else
-			SDK::Output("Amalgam", "Playerlist tags not found", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
+			SDK::Output("unibox", "Playerlist tags not found", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
 
 		if (auto tSub = tRead.get_child_optional("Aliases"))
 		{
@@ -168,14 +179,75 @@ void CPlayerlistCore::LoadPlayerlist()
 			}
 		}
 		else
-			SDK::Output("Amalgam", "Playerlist aliases not found", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
+			SDK::Output("unibox", "Playerlist aliases not found", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
 
-		SDK::Output("Amalgam", "Loaded playerlist", INFO_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_INFO);
+		SDK::Output("unibox", "Loaded playerlist", INFO_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_INFO);
 	}
 	catch (...)
 	{
-		SDK::Output("Amalgam", "Load playerlist failed", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
+		SDK::Output("unibox", "Load playerlist failed", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
 	}
-
 	F::PlayerUtils.m_bLoad = false;
+}
+
+void CPlayerlistCore::SaveCheaterlist()
+{
+	if (!F::PlayerUtils.m_bCheaterSave || F::PlayerUtils.m_bCheaterLoad)
+		return;
+
+	try
+	{
+		const std::string sJson = F::PlayerUtils.ExportCheatersToJson();
+		std::ofstream fStream(F::Configs.m_sCorePath + "Cheaters.json", std::ios::out | std::ios::trunc);
+		fStream << sJson;
+		fStream.close();
+
+		F::PlayerUtils.m_bCheaterSave = false;
+		SDK::Output("unibox", "Saved cheaterlist", { 255, 150, 150 }, OUTPUT_CONSOLE | OUTPUT_DEBUG | OUTPUT_MENU);
+	}
+	catch (...)
+	{
+		SDK::Output("unibox", "Save cheaterlist failed", { 255, 150, 150, 127 }, OUTPUT_CONSOLE | OUTPUT_DEBUG);
+	}
+}
+
+void CPlayerlistCore::LoadCheaterlist()
+{
+	if (!F::PlayerUtils.m_bCheaterLoad)
+		return;
+
+	try
+	{
+		const std::string sPath = F::Configs.m_sCorePath + "Cheaters.json";
+		if (!std::filesystem::exists(sPath))
+		{
+			F::PlayerUtils.m_bCheaterLoad = false;
+			return;
+		}
+
+		std::ifstream fStream(sPath);
+		if (!fStream.is_open())
+		{
+			F::PlayerUtils.m_bCheaterLoad = false;
+			return;
+		}
+
+		std::string sContents((std::istreambuf_iterator<char>(fStream)), std::istreambuf_iterator<char>());
+		fStream.close();
+
+		if (F::PlayerUtils.ImportCheatersFromJson(sContents, false))
+		{
+			F::PlayerUtils.m_bCheaterLoad = false;
+			SDK::Output("unibox", "Loaded cheaterlist", { 255, 150, 150 }, OUTPUT_CONSOLE | OUTPUT_DEBUG | OUTPUT_MENU);
+		}
+		else
+		{
+			SDK::Output("unibox", "Load cheaterlist failed", { 255, 150, 150, 127 }, OUTPUT_CONSOLE | OUTPUT_DEBUG);
+		}
+	}
+	catch (...)
+	{
+		SDK::Output("unibox", "Load cheaterlist failed", { 255, 150, 150, 127 }, OUTPUT_CONSOLE | OUTPUT_DEBUG);
+	}
+	F::PlayerUtils.m_bCheaterLoad = false;
 }

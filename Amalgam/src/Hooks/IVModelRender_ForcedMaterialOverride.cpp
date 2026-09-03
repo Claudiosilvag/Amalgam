@@ -9,8 +9,10 @@ MAKE_HOOK(IVModelRender_ForcedMaterialOverride, U::Memory.GetVirtual(I::ModelRen
 {
 	DEBUG_RETURN(IVModelRender_ForcedMaterialOverride, rcx, mat, type);
 
+#ifndef TEXTMODE
 	if (F::Chams.m_bRendering || F::Glow.m_bRendering)
 		return;
 
 	CALL_ORIGINAL(rcx, mat, type);
+#endif
 }

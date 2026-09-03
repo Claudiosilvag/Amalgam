@@ -5,6 +5,8 @@
 #include "../Features/Visuals/CameraWindow/CameraWindow.h"
 #include "../Features/Visuals/Visuals.h"
 #include "../Features/Visuals/Materials/Materials.h"
+#include "../Features/Navbot/NavEngine/NavEngine.h"
+#include "../Features/FollowBot/FollowBot.h"
 #include "../Features/Spectate/Spectate.h"
 
 MAKE_SIGNATURE(CViewRender_DrawViewModels, "client.dll", "48 89 5C 24 ? 55 56 57 41 54 41 55 41 56 41 57 48 8D 6C 24 ? 48 81 EC ? ? ? ? 48 8B 05 ? ? ? ? 48 8B FA", 0x0);
@@ -14,13 +16,20 @@ MAKE_HOOK(CClientModeShared_DoPostScreenSpaceEffects, U::Memory.GetVirtual(I::Cl
 {
 	DEBUG_RETURN(CClientModeShared_DoPostScreenSpaceEffects, rcx, pSetup);
 
+#ifdef TEXTMODE
+	return false;
+#else
 	if (SDK::CleanScreenshot() || G::Unload)
 		return CALL_ORIGINAL(rcx, pSetup);
 	
-	F::Visuals.ProjectileTrace(H::Entities.GetLocal(), H::Entities.GetWeapon());
+	auto pLocal = H::Entities.GetLocal();
+	F::Visuals.ProjectileTrace(pLocal, H::Entities.GetWeapon());
 	if (F::CameraWindow.m_bDrawing)
 		return CALL_ORIGINAL(rcx, pSetup);
-
+	
+	F::NavEngine.Render();
+	F::FollowBot.Render();
+	F::Visuals.Triggers(pLocal);
 	F::Visuals.DrawEffects();
 	if (I::EngineVGui->IsGameUIVisible() || !F::Materials.m_bLoaded)
 		return CALL_ORIGINAL(rcx, pSetup);
@@ -28,6 +37,7 @@ MAKE_HOOK(CClientModeShared_DoPostScreenSpaceEffects, U::Memory.GetVirtual(I::Cl
 	F::Chams.RenderMain();
 	F::Glow.RenderFirst();
 	return CALL_ORIGINAL(rcx, pSetup);
+#endif
 }
 
 MAKE_HOOK(CViewRender_DrawViewModels, S::CViewRender_DrawViewModels(), void,
@@ -35,9 +45,11 @@ MAKE_HOOK(CViewRender_DrawViewModels, S::CViewRender_DrawViewModels(), void,
 {
 	DEBUG_RETURN(CViewRender_DrawViewModels, rcx, viewRender, drawViewmodel);
 
+#ifndef TEXTMODE
 	CALL_ORIGINAL(rcx, viewRender, F::Spectate.HasTarget() && !I::EngineClient->IsHLTV() ? false : drawViewmodel);
 	if (SDK::CleanScreenshot() || F::CameraWindow.m_bDrawing || I::EngineVGui->IsGameUIVisible() || !F::Materials.m_bLoaded)
 		return;
 
 	F::Glow.RenderSecond();
+#endif
 }

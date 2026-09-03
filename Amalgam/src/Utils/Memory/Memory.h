@@ -11,9 +11,13 @@ public:
 	std::vector<byte> PatternToByte(const char* szPattern);
 	std::vector<int> PatternToInt(const char* szPattern);
 	uintptr_t FindSignature(const char* szModule, const char* szPattern);
+	uintptr_t FindSignatureAtAddress(uintptr_t uAddress, const char* szPattern, uintptr_t uSkipAddress = 0x0, bool* bRetFound = nullptr);
+	uintptr_t FindSignatureAtAddress(uintptr_t uAddress, std::vector<int> vPattern, uintptr_t uSkipAddress = 0x0, bool* bRetFound = nullptr);
 	PVOID FindInterface(const char* szModule, const char* szObject);
 	std::string GetModuleOffset(void* pAddress) { return GetModuleOffset(uintptr_t(pAddress)); };
 	std::string GetModuleOffset(uintptr_t uAddress);
+	std::string GetModuleName(uintptr_t uAddress);
+	std::string GenerateSignatureAtAddress(uintptr_t address, size_t maxLength = 120);
 	uintptr_t GetOffsetFromBase(void* pAddress) { return GetOffsetFromBase(uintptr_t(pAddress)); };
 	uintptr_t GetOffsetFromBase(uintptr_t uAddress);
 

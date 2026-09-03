@@ -55,8 +55,9 @@ void CResolver::FrameStageNotify()
 	for (auto& pEntity : H::Entities.GetGroup(EntityEnum::PlayerAll))
 	{
 		auto pPlayer = pEntity->As<CTFPlayer>();
-		if (pPlayer->entindex() == I::EngineClient->GetLocalPlayer() || !pPlayer->IsAlive() || pPlayer->IsAGhost()
-			|| !H::Entities.GetDeltaTime(pPlayer->entindex()))
+		if (pPlayer->entindex() == I::EngineClient->GetLocalPlayer() ||
+			pPlayer->IsDormant() || !pPlayer->IsAlive() || pPlayer->IsAGhost() ||
+			!H::Entities.GetDeltaTime(pPlayer->entindex()))
 			continue;
 
 		int iUserID = pResource->m_iUserID(pPlayer->entindex());
@@ -252,7 +253,9 @@ void CResolver::CreateMove()
 void CResolver::HitscanRan(CTFPlayer* pLocal, CTFPlayer* pTarget, CTFWeaponBase* pWeapon, int nHitbox)
 {
 	if (!Vars::Resolver::Enabled.Value || !Vars::Resolver::AutoResolve.Value
-		|| Vars::Aimbot::General::AimType.Value == Vars::Aimbot::General::AimTypeEnum::Smooth || pLocal->m_iTeamNum() == pTarget->m_iTeamNum())
+		|| Vars::Aimbot::General::AimType.Value == Vars::Aimbot::General::AimTypeEnum::Smooth
+		|| Vars::Aimbot::General::AimType.Value == Vars::Aimbot::General::AimTypeEnum::SmoothVelocity
+		|| pLocal->m_iTeamNum() == pTarget->m_iTeamNum())
 		return;
 
 	if (Vars::Resolver::AutoResolveCheatersOnly.Value && !F::PlayerUtils.HasTag(pTarget->entindex(), CHEATER_TAG))

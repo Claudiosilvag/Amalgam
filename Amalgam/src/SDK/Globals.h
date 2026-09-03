@@ -80,9 +80,61 @@ struct AimPoint_t
 	int m_iDuration = 32;
 };
 
+struct WeaponAmmoInfo_t
+{
+	int m_iClip = 0;
+	int m_iMaxClip = 0;
+	int m_iReserve = 0;
+	int m_iMaxReserve = 0;
+	bool m_bUsesAmmo = false;
+};
+
+Enum(TriggerType, None,
+	 Hurt,
+	 Ignite,
+	 Push,
+	 Regenerate,
+	 UpgradeStation,
+	 RespawnRoom,
+	 CaptureArea,
+	 Catapult,
+	 ApplyImpulse
+);
+
+struct BrushSurface_t
+{
+	Vec3 m_vCenter = {};
+	std::vector<Vec3> m_vPoints = {};
+};
+struct model_t;
+struct TriggerData_t
+{
+	model_t* m_pModel = nullptr;
+	TriggerTypeEnum::TriggerTypeEnum m_eType = TriggerTypeEnum::None;
+	Vec3 m_vOrigin = {};
+	Vec3 m_vCenter = {};
+	Vec3 m_vAngles = {};
+	Vec3 m_vRotate = {};
+	int m_iTeam = 0;
+
+	std::vector<BrushSurface_t> m_vBrushSurfaces = {};
+
+	bool PointIsWithin(Vec3 vPoint) const;
+};
+
+struct PasstimeMapGoalData_t
+{
+	Vec3 m_vOrigin = {};
+	std::string m_sTargetname = {};
+	int m_iTeam = 0;
+	int m_iSpawnflags = 0;
+	bool m_bStartDisabled = false;
+};
+
 namespace G
 {
 	inline bool Unload = false;
+	inline bool SendPacket = false;
 
 	inline int Attacking = 0;
 	inline bool Reloading = false;
@@ -92,6 +144,7 @@ namespace G
 	inline int Throwing = false;
 	inline float Lerp = 0.015f;
 	inline float FOV = 90.f;
+	inline float WranglerSecondFireTime = 0.f;
 
 	inline EWeaponType PrimaryWeaponType = {}, SecondaryWeaponType = {};
 
@@ -108,6 +161,7 @@ namespace G
 
 	inline bool AntiAim = false;
 	inline bool Choking = false;
+	inline bool AimbotSteering = false;
 
 	inline bool UpdatingAnims = false;
 	inline bool FlipViewmodels = false;
@@ -118,6 +172,14 @@ namespace G
 	inline std::vector<DrawSphere_t> SphereStorage = {};
 	inline std::vector<DrawSwept_t> SweptStorage = {};
 	inline std::vector<DrawTriangle_t> TriangleStorage = {};
+	inline std::vector<TriggerData_t> TriggerStorage = {};
+	inline std::vector<PasstimeMapGoalData_t> PasstimeGoalStorage = {};
+
+	inline int SavedDefIndexes[SLOT_PDA2 + 1] = { -1,-1,-1,-1,-1 };
+	inline int SavedWepIds[SLOT_PDA2 + 1] = { -1,-1,-1,-1,-1 };
+	inline int SavedWepSlots[SLOT_PDA2 + 1] = { -1,-1,-1,-1,-1 };
+	inline WeaponAmmoInfo_t AmmoInSlot[SLOT_SECONDARY + 1] = { WeaponAmmoInfo_t(), WeaponAmmoInfo_t() };
+	inline bool HasWeaponForSlot[SLOT_MELEE + 1] = { false, false, false };
 
 	inline int& RandomSeed()
 	{

@@ -7,6 +7,7 @@ MAKE_HOOK(CHudCrosshair_GetDrawPosition, S::CHudCrosshair_GetDrawPosition(), voi
 {
 	DEBUG_RETURN(CHudCrosshair_GetDrawPosition, pX, pY, pbBehindCamera, angleCrosshairOffset);
 
+#ifndef TEXTMODE
 	if (!Vars::Visuals::Viewmodel::CrosshairAim.Value && !Vars::Visuals::Thirdperson::Crosshair.Value || SDK::CleanScreenshot())
 		return CALL_ORIGINAL(pX, pY, pbBehindCamera, angleCrosshairOffset);
 
@@ -37,8 +38,7 @@ MAKE_HOOK(CHudCrosshair_GetDrawPosition, S::CHudCrosshair_GetDrawPosition(), voi
 		Vec3 vEndPos = vStartPos + vForward * 8192;
 
 		CGameTrace trace = {};
-		CTraceFilterHitscan filter = {};
-		filter.pSkip = pLocal;
+		CTraceFilterHitscan filter(pLocal);
 		SDK::Trace(vStartPos, vEndPos, MASK_SHOT, &filter, &trace);
 
 		Vec3 vScreen;
@@ -53,4 +53,5 @@ MAKE_HOOK(CHudCrosshair_GetDrawPosition, S::CHudCrosshair_GetDrawPosition(), voi
 
 	if (!bSet)
 		CALL_ORIGINAL(pX, pY, pbBehindCamera, angleCrosshairOffset);
+#endif
 }

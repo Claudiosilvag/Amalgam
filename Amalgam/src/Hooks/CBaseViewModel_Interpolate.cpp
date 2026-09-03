@@ -1,3 +1,4 @@
+#ifndef TEXTMODE
 #include "../SDK/SDK.h"
 
 #include "../Features/Ticks/Ticks.h"
@@ -14,3 +15,4 @@ MAKE_HOOK(CBaseViewModel_Interpolate, S::CBaseViewModel_Interpolate(), bool,
 
 	return CALL_ORIGINAL(rcx, currentTime);
 }
+#endif

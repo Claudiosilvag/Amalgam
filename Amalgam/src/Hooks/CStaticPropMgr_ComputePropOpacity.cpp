@@ -7,6 +7,7 @@ MAKE_HOOK(CStaticPropMgr_ComputePropOpacity, S::CStaticPropMgr_ComputePropOpacit
 {
 	DEBUG_RETURN(CStaticPropMgr_ComputePropOpacity, rcx, pProp);
 
+#ifndef TEXTMODE
 	if (Vars::Visuals::World::NoPropFade.Value && pProp)
 	{
 		pProp->m_Alpha = 255;
@@ -14,4 +15,5 @@ MAKE_HOOK(CStaticPropMgr_ComputePropOpacity, S::CStaticPropMgr_ComputePropOpacit
 	}
 
 	CALL_ORIGINAL(rcx, pProp);
+#endif
 }

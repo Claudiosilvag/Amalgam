@@ -51,6 +51,9 @@ public:
 	NETVAR(m_vecOrigin, Vec3, "CTFWeaponBaseGrenadeProj", "m_vecOrigin");
 	NETVAR(m_angRotation, Vec3, "CTFWeaponBaseGrenadeProj", "m_angRotation");
 	NETVAR(m_hDeflectOwner, EHANDLE, "CTFWeaponBaseGrenadeProj", "m_hDeflectOwner");
+
+	VIRTUAL(GetDamageRadius, float, 220, this);
+	VIRTUAL(GetDamageType, int, 229, this);
 };
 
 class CTFProjectile_Rocket : public CTFBaseRocket

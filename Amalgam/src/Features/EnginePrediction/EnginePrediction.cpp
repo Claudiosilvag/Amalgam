@@ -11,7 +11,7 @@ void CEnginePrediction::AdjustPlayers(CBaseEntity* pLocal)
 	for (auto pEntity : H::Entities.GetGroup(EntityEnum::PlayerAll))
 	{
 		auto pPlayer = pEntity->As<CTFPlayer>();
-		if (pPlayer == pLocal || !pPlayer->IsAlive() || pPlayer->IsAGhost())
+		if (pPlayer == pLocal || pPlayer->IsDormant() || !pPlayer->IsAlive() || pPlayer->IsAGhost())
 			continue;
 
 		m_mRestore[pPlayer] = { pPlayer->GetAbsOrigin(), pPlayer->m_vecMins(), pPlayer->m_vecMaxs() };
@@ -50,7 +50,7 @@ void CEnginePrediction::Simulate(CTFPlayer* pLocal, CUserCmd* pCmd)
 	I::GameMovement->ProcessMovement(pLocal, &m_tMoveData);
 	I::Prediction->FinishMove(pLocal, pCmd, &m_tMoveData);
 	RestorePlayers();
-
+	
 	I::MoveHelper->SetHost(nullptr);
 	pLocal->m_pCurrentCommand() = nullptr;
 	G::RandomSeed() = -1;

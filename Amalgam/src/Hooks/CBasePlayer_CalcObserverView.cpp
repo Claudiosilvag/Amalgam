@@ -1,3 +1,4 @@
+#ifndef TEXTMODE
 #include "../SDK/SDK.h"
 
 #include "../Features/Spectate/Spectate.h"
@@ -22,3 +23,4 @@ MAKE_HOOK(CBasePlayer_CalcObserverView, S::CBasePlayer_CalcObserverView(), void,
 	CALL_ORIGINAL(rcx, eyeOrigin, eyeAngles, fov);
 	pPlayer->m_vecViewOffset() = vOldOffset;
 }
+#endif

@@ -5,6 +5,7 @@
 #include "../../Resolver/Resolver.h"
 #include "../../NoSpread/NoSpread.h"
 #include "../../Simulation/MovementSimulation/MovementSimulation.h"
+#include "../../NavBot/BotUtils.h"
 #include "../../Visuals/Visuals.h"
 #include "../../AntiCheatCompatibility/AntiCheatCompatibility.h"
 
@@ -62,7 +63,11 @@ static inline std::vector<Target_t> GetTargets(CTFPlayer* pLocal, CTFWeaponBase*
 				switch (Vars::Aimbot::Healing::HealPriority.Value)
 				{
 				case Vars::Aimbot::Healing::HealPriorityEnum::PrioritizeFriends:
-					if (H::Entities.IsFriend(pEntity->entindex()) || H::Entities.InParty(pEntity->entindex()))
+					if (H::Entities.IsFriend(pEntity->entindex()))
+						iPriority = std::numeric_limits<int>::max();
+					break;
+				case Vars::Aimbot::Healing::HealPriorityEnum::PrioritizeParty:
+					if (H::Entities.InParty(pEntity->entindex()))
 						iPriority = std::numeric_limits<int>::max();
 					break;
 				case Vars::Aimbot::Healing::HealPriorityEnum::PrioritizeTeam:
@@ -151,17 +156,8 @@ std::vector<HitscanHitbox_t> CAimbotHitscan::GetHitboxes(CTFPlayer* pLocal, CTFW
 
 	if (pWeapon->GetWeaponID() == TF_WEAPON_LASER_POINTER)
 	{
-		CObjectSentrygun* pSentry = nullptr;
-		for (auto pEntity : H::Entities.GetGroup(EntityEnum::BuildingTeam))
-		{
-			if (pEntity->IsSentrygun() && pEntity->As<CBaseObject>()->m_hBuilder().GetEntryIndex() == I::EngineClient->GetLocalPlayer())
-			{
-				pSentry = pEntity->As<CObjectSentrygun>();
-				break;
-			}
-		}
-		if (!pSentry)
-			return vHitboxes;
+		auto pSentry = pLocal->GetObjectOfType(OBJ_SENTRYGUN)->As<CObjectSentrygun>();
+		if (!pSentry) return vHitboxes;
 
 		Vec3 vOrigin = pTarget->m_vecOrigin();
 		{
@@ -274,7 +270,7 @@ int CAimbotHitscan::GetHitboxPriority(int nHitbox, CTFPlayer* pLocal, CTFWeaponB
 		}
 		}
 	}
-	
+
 	bool bHeadOnly = bHeadshot && Vars::Aimbot::Hitscan::Hitboxes.Value & Vars::Aimbot::Hitscan::HitboxesEnum::HeadshotOnly;
 
 	int iHeadPriority = bHeadshot ? 0 : 1;
@@ -385,6 +381,7 @@ int CAimbotHitscan::CanHit(Target_t& tTarget, CTFPlayer* pLocal, CTFWeaponBase* 
 		return false;
 
 	m_vEyePos = pLocal->GetShootPos();
+
 	float flMaxRangeSqr = powf(pWeapon->GetRange(), 2.f);
 	bool bPlayer = tTarget.m_pEntity->IsPlayer();
 	bool bWrangler = pWeapon->GetWeaponID() == TF_WEAPON_LASER_POINTER;
@@ -403,6 +400,7 @@ int CAimbotHitscan::CanHit(Target_t& tTarget, CTFPlayer* pLocal, CTFWeaponBase* 
 			return false;
 
 		vRecords = { &F::Backtrack.m_tRecord };
+		F::Backtrack.m_tRecord = { tTarget.m_pEntity->m_flSimulationTime(), tTarget.m_pEntity->m_vecOrigin() };
 	}
 
 	auto vHitboxes = GetHitboxes(pLocal, pWeapon, tTarget.m_pEntity);
@@ -576,7 +574,7 @@ bool CAimbotHitscan::ShouldFire(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUser
 			}
 			else
 				break;
-			
+
 			return false;
 		}
 		}
@@ -603,16 +601,22 @@ bool CAimbotHitscan::Aim(const Vec3& vCurAngle, Vec3 vToAngle, Vec3& vOut, int i
 	case Vars::Aimbot::General::AimTypeEnum::Locking:
 		vOut = vToAngle;
 		break;
+	case Vars::Aimbot::General::AimTypeEnum::Legit:
+		vOut = vCurAngle;
+		bReturn = true;
+		break;
 	case Vars::Aimbot::General::AimTypeEnum::Smooth:
-		vOut = vCurAngle.LerpAngle(vToAngle, Vars::Aimbot::General::AssistStrength.Value / 100.f);
+	case Vars::Aimbot::General::AimTypeEnum::SmoothVelocity:
+		vOut = vCurAngle.LerpAngle(vToAngle, F::Aimbot.GetSmoothStrength(vCurAngle, vToAngle));
 		bReturn = true;
 		break;
 	case Vars::Aimbot::General::AimTypeEnum::Assistive:
 		Vec3 vMouseDelta = G::CurrentUserCmd->viewangles.DeltaAngle(G::LastUserCmd->viewangles);
 		Vec3 vTargetDelta = vToAngle.DeltaAngle(G::LastUserCmd->viewangles);
+
 		float flMouseDelta = vMouseDelta.Length2DSqr(), flTargetDelta = vTargetDelta.Length2DSqr();
 		vTargetDelta = vTargetDelta.Normalized() * sqrtf(std::min(flMouseDelta, flTargetDelta));
-		vOut = vCurAngle - vMouseDelta + vMouseDelta.LerpAngle(vTargetDelta, Vars::Aimbot::General::AssistStrength.Value / 100.f);
+		vOut = vCurAngle - vMouseDelta + vMouseDelta.LerpAngle(vTargetDelta, F::Aimbot.GetSmoothStrength(vCurAngle, vToAngle));
 		bReturn = true;
 		break;
 	}
@@ -625,6 +629,16 @@ bool CAimbotHitscan::Aim(const Vec3& vCurAngle, Vec3 vToAngle, Vec3& vOut, int i
 // assume angle calculated outside with other overload
 void CAimbotHitscan::Aim(CUserCmd* pCmd, Vec3& vAngles, int iMethod)
 {
+	Vec3 vOldView = pCmd->viewangles;
+	auto MarkSteering = [&](const Vec3& vNew)
+		{
+			if (G::AimbotSteering)
+				return;
+			Vec3 vDelta = vNew.DeltaAngle(vOldView);
+			if (std::fabs(vDelta.x) > 0.01f || std::fabs(vDelta.y) > 0.01f || std::fabs(vDelta.z) > 0.01f)
+				G::AimbotSteering = true;
+		};
+
 	bool bUnsure = F::Ticks.IsTimingUnsure();
 	switch (iMethod)
 	{
@@ -633,9 +647,11 @@ void CAimbotHitscan::Aim(CUserCmd* pCmd, Vec3& vAngles, int iMethod)
 			break;
 		[[fallthrough]];
 	case Vars::Aimbot::General::AimTypeEnum::Smooth:
+		case Vars::Aimbot::General::AimTypeEnum::SmoothVelocity:
 	case Vars::Aimbot::General::AimTypeEnum::Assistive:
 		pCmd->viewangles = vAngles;
 		I::EngineClient->SetViewAngles(vAngles);
+		MarkSteering(vAngles);
 		break;
 	case Vars::Aimbot::General::AimTypeEnum::Silent:
 		if (G::Attacking == 1 || bUnsure)
@@ -643,12 +659,25 @@ void CAimbotHitscan::Aim(CUserCmd* pCmd, Vec3& vAngles, int iMethod)
 			SDK::FixMovement(pCmd, vAngles);
 			pCmd->viewangles = vAngles;
 			G::SilentAngles = true;
+			MarkSteering(vAngles);
 		}
 		break;
+	case Vars::Aimbot::General::AimTypeEnum::Legit:
+	{
+		auto pLocal = H::Entities.GetLocal();
+		if (pLocal && G::AimPoint.m_iTickCount == I::GlobalVars->tickcount)
+		{
+			F::BotUtils.LookLegit(pLocal, pCmd, G::AimPoint.m_vOrigin, false);
+			vAngles = pCmd->viewangles;
+			MarkSteering(vAngles);
+		}
+		break;
+	}
 	case Vars::Aimbot::General::AimTypeEnum::Locking:
 		SDK::FixMovement(pCmd, vAngles);
 		pCmd->viewangles = vAngles;
 		G::SilentAngles = true;
+		MarkSteering(vAngles);
 	}
 }
 
@@ -695,6 +724,95 @@ static inline void DrawVisuals(CTFPlayer* pLocal, Target_t& tTarget, int nWeapon
 	}
 }
 
+// There's probably a better way of doing this
+CAimbotHitscan::CrosshairRecordInfo_t CAimbotHitscan::GetCrosshairRecord(const Vec3 vAngles, const Vec3 vPos, std::vector<TickRecord*> vRecords, const std::vector<const mstudiobbox_t*> vHitboxes)
+{
+	float flMinFov = 45.f;
+	float flMinDist = 50.f;
+	float flSimTime = -1.f;
+	bool bInsideRecord = false;
+	for (auto pRecord : vRecords)
+	{
+		for (auto pBox : vHitboxes)
+		{
+			Vec3 vPoint = (pBox->bbmin + pBox->bbmax) / 2;
+			Vec3 vCenter; Math::VectorTransform(vPoint, pRecord->m_aBones[pBox->bone], vCenter);
+			const auto vAngleTo = Math::CalcAngle(vPos, vCenter);
+			const float flFOVTo = Math::CalcFov(vAngles, vAngleTo);
+			const float flDistTo = vPos.DistTo(vCenter);
+
+			// We are inside this record (probably)
+			if (flDistTo < flMinDist)
+			{
+				flSimTime = pRecord->m_flSimTime;
+				flMinDist = flDistTo;
+				bInsideRecord = true;
+			}
+			else if (!bInsideRecord && flFOVTo < flMinFov)
+			{
+				flSimTime = pRecord->m_flSimTime;
+				flMinFov = flFOVTo;
+			}
+		}
+	}
+
+	return CrosshairRecordInfo_t{ flMinDist, flMinFov, flSimTime, bInsideRecord };
+}
+
+void CAimbotHitscan::BacktrackToCrosshair(CUserCmd* pCmd)
+{
+	const Vec3 vShootPos = F::Ticks.GetShootPos();
+	const Vec3 vAngles = pCmd->viewangles;
+
+	std::vector<CrosshairRecordInfo_t> vValidRecords;
+	for (auto pEntity : H::Entities.GetGroup(EntityEnum::PlayerEnemy))
+	{
+		if (!pEntity->As<CTFPlayer>()->IsAlive() 
+			|| pEntity->As<CTFPlayer>()->IsAGhost() 
+			|| pEntity->As<CTFPlayer>()->IsInvulnerable())
+			continue;
+
+		const mstudiohitboxset_t* pSet = pEntity->As<CBaseAnimating>()->GetHitboxSet();
+		if (!pSet) continue;
+
+		std::vector<TickRecord*> vRecords;
+		if (!F::Backtrack.GetRecords(pEntity, vRecords))
+			continue;
+		
+		std::vector<const mstudiobbox_t*> vHitboxes;
+		for (int i = 0; i < pSet->numhitboxes; i++)
+			if (auto pBox = pSet->pHitbox(i)) vHitboxes.emplace_back(pBox);
+
+		if (vHitboxes.empty())
+			continue;
+
+		vRecords = F::Backtrack.GetValidRecords(vRecords);
+		CrosshairRecordInfo_t tRecordInfo = GetCrosshairRecord(vAngles, vShootPos, vRecords, vHitboxes);
+		if (tRecordInfo.m_flSimTime == -1.f)
+			continue;
+
+		vValidRecords.push_back(tRecordInfo);
+	}
+
+	if (vValidRecords.empty())
+		return;
+
+	auto pFinalTick = std::ranges::min_element(vValidRecords, [&](const CrosshairRecordInfo_t& a, const CrosshairRecordInfo_t& b)
+		{
+			const bool bInsideBoth = a.m_bInsideThisRecord && b.m_bInsideThisRecord;
+			const bool bNotInsideRecords = !a.m_bInsideThisRecord && !b.m_bInsideThisRecord;
+
+			const bool bResult =
+			{
+					bInsideBoth ? a.m_flMinDist < b.m_flMinDist :
+					bNotInsideRecords ? a.m_flFov < b.m_flFov :
+					a.m_bInsideThisRecord
+			};
+			return bResult;
+		});
+	pCmd->tick_count = TIME_TO_TICKS(pFinalTick->m_flSimTime + F::Backtrack.GetFakeInterp());
+}
+
 void CAimbotHitscan::Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd)
 {
 	const int nWeaponID = pWeapon->GetWeaponID();
@@ -727,7 +845,7 @@ void CAimbotHitscan::Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pC
 		break;
 	}
 
-	auto vTargets = F::AimbotGlobal.ManageTargets(GetTargets, pLocal, pWeapon);
+	auto vTargets = F::AimbotGlobal.ManageTargets(GetTargets, pLocal, pWeapon, Vars::Aimbot::General::TargetSelectionHitscan.Value);
 	if (vTargets.empty())
 		return;
 
@@ -770,6 +888,7 @@ void CAimbotHitscan::Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pC
 		if (iResult == 2)
 		{
 			G::AimTarget = { tTarget.m_pEntity->entindex(), I::GlobalVars->tickcount, 0 };
+			G::AimPoint = { tTarget.m_vPos, I::GlobalVars->tickcount };
 			Aim(pCmd, tTarget.m_vAngleTo);
 			break;
 		}
@@ -787,7 +906,7 @@ void CAimbotHitscan::Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pC
 					pCmd->buttons &= ~IN_ATTACK;
 				break;
 			case TF_WEAPON_LASER_POINTER:
-				pCmd->buttons |= IN_ATTACK | IN_ATTACK2;
+				pCmd->buttons |= IN_ATTACK;
 				break;
 			default:
 				pCmd->buttons |= IN_ATTACK;
@@ -805,11 +924,12 @@ void CAimbotHitscan::Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pC
 		G::Attacking = SDK::IsAttacking(pLocal, pWeapon, pCmd, true);
 		if (G::Attacking == 1 && nWeaponID != TF_WEAPON_LASER_POINTER)
 		{
+			F::Aimbot.m_eRanType = EWeaponType::HITSCAN;
 			if (tTarget.m_pEntity->IsPlayer())
 				F::Resolver.HitscanRan(pLocal, tTarget.m_pEntity->As<CTFPlayer>(), pWeapon, tTarget.m_nAimedHitbox);
 
 			if (tTarget.m_bBacktrack)
-				pCmd->tick_count = TIME_TO_TICKS(tTarget.m_pRecord->m_flSimTime) + TIME_TO_TICKS(F::Backtrack.GetFakeInterp());
+				pCmd->tick_count = TIME_TO_TICKS(tTarget.m_pRecord->m_flSimTime + F::Backtrack.GetFakeInterp());
 		}
 		DrawVisuals(pLocal, tTarget, nWeaponID);
 
@@ -819,7 +939,7 @@ void CAimbotHitscan::Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pC
 			switch (nWeaponID)
 			{
 			case TF_WEAPON_MEDIGUN:
-			//case TF_WEAPON_LASER_POINTER: // we can psilent with the wrangler though probably with some hacks
+				//case TF_WEAPON_LASER_POINTER: // we can psilent with the wrangler though probably with some hacks
 				G::SilentAngles = false, G::PSilentAngles = true;
 			}
 		}

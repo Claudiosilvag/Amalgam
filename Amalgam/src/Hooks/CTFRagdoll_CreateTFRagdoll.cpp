@@ -7,6 +7,7 @@ MAKE_HOOK(CTFRagdoll_CreateTFRagdoll, S::CTFRagdoll_CreateTFRagdoll(), void,
 {
 	DEBUG_RETURN(CTFRagdoll_CreateTFRagdoll, rcx);
 
+#ifndef TEXTMODE
 	if (Vars::Visuals::Removals::Ragdolls.Value)
 		return;
 
@@ -30,4 +31,5 @@ MAKE_HOOK(CTFRagdoll_CreateTFRagdoll, S::CTFRagdoll_CreateTFRagdoll(), void,
 	*/
 
 	CALL_ORIGINAL(rcx);
+#endif
 }

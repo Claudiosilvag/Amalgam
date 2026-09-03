@@ -3,10 +3,12 @@
 #include "../Features/ImGui/Notifications/Notifications.h"
 #include "../Features/ImGui/Menu/Menu.h"
 #include "../Features/EnginePrediction/EnginePrediction.h"
+#include "../Features/NavBot/NavEngine/NavEngine.h"
 #include "../Features/Ticks/Ticks.h"
 
 #pragma warning (disable : 6385)
 
+MAKE_SIGNATURE(CM_TransformedBoxTrace, "engine.dll", "48 8B C4 48 89 58 ? 55 56 57 48 8D 68 ? 48 81 EC ? ? ? ? F3 0F 10 41", 0x0);
 MAKE_SIGNATURE(CAttributeManager_AttribHookValue_Float, "client.dll", "4C 8B DC 49 89 5B ? 49 89 6B ? 56 57 41 54 41 56 41 57 48 83 EC ? 48 8B 3D ? ? ? ? 4C 8D 35", 0x0);
 MAKE_SIGNATURE(IHasGenericMeter_GetMeterMultiplier, "client.dll", "F3 0F 10 81 ? ? ? ? C3 CC CC CC CC CC CC CC 48 85 D2", 0x0);
 
@@ -31,6 +33,249 @@ static BOOL CALLBACK TeamFortressWindow(HWND hWindow, LPARAM lParam)
 	*reinterpret_cast<HWND*>(lParam) = hWindow;
 	return FALSE;
 }
+
+	static constexpr int BspHeaderID = ('V' << 24) | ('B' << 16) | ('S' << 8) | 'P';
+	static constexpr int BspHeaderLumps = 64;
+	static constexpr int BspLumpEntities = 0;
+
+	struct bsp_lump_t
+	{
+		int m_iFileOffset = 0;
+		int m_iFileLength = 0;
+		int m_iVersion = 0;
+		char m_chFourCC[4] = {};
+	};
+
+	struct bsp_header_t
+	{
+		int m_iIdent = 0;
+		int m_iVersion = 0;
+		bsp_lump_t m_aLumps[BspHeaderLumps] = {};
+		int m_iMapRevision = 0;
+	};
+
+	static void SkipEntityWhitespace(const std::string_view sData, size_t& iOffset)
+	{
+		while (iOffset < sData.size() && isspace(static_cast<unsigned char>(sData[iOffset])))
+			iOffset++;
+	}
+
+	static auto ParseQuotedEntityToken(const std::string_view sData, size_t& iOffset) -> std::string
+	{
+		SkipEntityWhitespace(sData, iOffset);
+		if (iOffset >= sData.size() || sData[iOffset] != '"')
+			return {};
+
+		iOffset++;
+		std::string sOut = {};
+		while (iOffset < sData.size())
+		{
+			const char cCurrent = sData[iOffset++];
+			if (cCurrent == '"')
+				break;
+			if (cCurrent == '\\' && iOffset < sData.size())
+				sOut.push_back(sData[iOffset++]);
+			else
+				sOut.push_back(cCurrent);
+		}
+
+		return sOut;
+	}
+
+	static auto TriggerTypeFromClassname(const std::string& sClassname, bool& bRespawnRoomOut) -> TriggerTypeEnum::TriggerTypeEnum
+	{
+		bRespawnRoomOut = false;
+		switch (FNV1A::Hash32(sClassname.c_str()))
+		{
+		case FNV1A::Hash32Const("trigger_hurt"):
+			return TriggerTypeEnum::Hurt;
+		case FNV1A::Hash32Const("trigger_ignite"):
+			return TriggerTypeEnum::Ignite;
+		case FNV1A::Hash32Const("trigger_push"):
+			return TriggerTypeEnum::Push;
+		case FNV1A::Hash32Const("func_respawnroom"):
+			bRespawnRoomOut = true;
+			return TriggerTypeEnum::RespawnRoom;
+		case FNV1A::Hash32Const("func_regenerate"):
+			return TriggerTypeEnum::Regenerate;
+		case FNV1A::Hash32Const("func_upgradestation"):
+			return TriggerTypeEnum::UpgradeStation;
+		case FNV1A::Hash32Const("trigger_capture_area"):
+		case FNV1A::Hash32Const("func_capturezone"):
+			return TriggerTypeEnum::CaptureArea;
+		case FNV1A::Hash32Const("trigger_catapult"):
+			return TriggerTypeEnum::Catapult;
+		case FNV1A::Hash32Const("trigger_apply_impulse"):
+			return TriggerTypeEnum::ApplyImpulse;
+		default:
+			return TriggerTypeEnum::None;
+		}
+	}
+
+	static Vector ParseEntityVector(const std::string& sValue)
+	{
+		Vector vOut = {};
+		if (sValue.empty())
+			return vOut;
+
+		sscanf_s(sValue.c_str(), "%f %f %f", &vOut.x, &vOut.y, &vOut.z);
+		return vOut;
+	}
+
+	static bool AppendTriggerFromKeyValues(const std::unordered_map<std::string, std::string>& mKeyValues)
+	{
+		auto itClassname = mKeyValues.find("classname");
+		if (itClassname == mKeyValues.end())
+			return false;
+
+		bool bIsRespawnRoom = false;
+		const auto eType = TriggerTypeFromClassname(itClassname->second, bIsRespawnRoom);
+		if (eType == TriggerTypeEnum::None)
+			return false;
+
+		auto itModel = mKeyValues.find("model");
+		if (itModel == mKeyValues.end() || itModel->second.empty())
+			return false;
+
+		if (auto itParentname = mKeyValues.find("parentname"); itParentname != mKeyValues.end() && !itParentname->second.empty())
+			return false;
+
+		model_t* pModel = I::ModelLoader->FindModel(itModel->second.c_str());
+		if (!pModel)
+			return false;
+
+		const auto GetKeyValueOrDefault = [&mKeyValues](const char* sKey) -> const char*
+			{
+				if (auto it = mKeyValues.find(sKey); it != mKeyValues.end())
+					return it->second.c_str();
+				return "";
+			};
+
+		const Vector vOrigin = ParseEntityVector(GetKeyValueOrDefault("origin"));
+		Vector vAngles = {};
+		Vector vRotate = {};
+
+		if (const char* sAngles = GetKeyValueOrDefault("pushdir"); *sAngles)
+			vAngles = ParseEntityVector(sAngles);
+		else if (const char* sImpulseDir = GetKeyValueOrDefault("impulse_dir"); *sImpulseDir)
+			vAngles = ParseEntityVector(sImpulseDir);
+		else if (const char* sLaunchDir = GetKeyValueOrDefault("launchDirection"); *sLaunchDir)
+			vAngles = ParseEntityVector(sLaunchDir);
+
+		if (const char* sRotate = GetKeyValueOrDefault("angles"); *sRotate)
+			vRotate = ParseEntityVector(sRotate);
+
+		int iTeam = 0;
+		if (const char* sTeam = GetKeyValueOrDefault("TeamNum"); *sTeam)
+			iTeam = atoi(sTeam);
+
+		TriggerData_t tTrigger = { pModel, eType, vOrigin, {}, vAngles, vRotate, iTeam, {} };
+		SDK::BuildTriggerGeometry(tTrigger);
+		G::TriggerStorage.push_back(tTrigger);
+		if (bIsRespawnRoom)
+			F::NavEngine.AddRespawnRoom(iTeam, tTrigger);
+		return true;
+	}
+
+	static void AppendPasstimeGoalFromKeyValues(const std::unordered_map<std::string, std::string>& mKeyValues)
+	{
+		auto itClassname = mKeyValues.find("classname");
+		if (itClassname == mKeyValues.end() || itClassname->second != "func_passtime_goal")
+			return;
+
+		PasstimeMapGoalData_t tGoal = {};
+		if (auto itOrigin = mKeyValues.find("origin"); itOrigin != mKeyValues.end())
+			tGoal.m_vOrigin = ParseEntityVector(itOrigin->second);
+		if (auto itTargetname = mKeyValues.find("targetname"); itTargetname != mKeyValues.end())
+			tGoal.m_sTargetname = itTargetname->second;
+		if (auto itTeam = mKeyValues.find("TeamNum"); itTeam != mKeyValues.end())
+			tGoal.m_iTeam = atoi(itTeam->second.c_str());
+		if (auto itSpawnflags = mKeyValues.find("spawnflags"); itSpawnflags != mKeyValues.end())
+			tGoal.m_iSpawnflags = atoi(itSpawnflags->second.c_str());
+		if (auto itStartDisabled = mKeyValues.find("StartDisabled"); itStartDisabled != mKeyValues.end())
+			tGoal.m_bStartDisabled = atoi(itStartDisabled->second.c_str()) != 0;
+
+		G::PasstimeGoalStorage.push_back(std::move(tGoal));
+	}
+
+	static bool BuildTriggerStorageFromEntityLump(const std::string_view sEntityLump, int& iOutTriggers)
+	{
+		iOutTriggers = 0;
+		size_t iOffset = 0;
+		while (iOffset < sEntityLump.size())
+		{
+			SkipEntityWhitespace(sEntityLump, iOffset);
+			if (iOffset >= sEntityLump.size())
+				break;
+
+			if (sEntityLump[iOffset] != '{')
+			{
+				iOffset++;
+				continue;
+			}
+
+			iOffset++;
+			std::unordered_map<std::string, std::string> mKeyValues = {};
+			while (iOffset < sEntityLump.size())
+			{
+				SkipEntityWhitespace(sEntityLump, iOffset);
+				if (iOffset >= sEntityLump.size())
+					break;
+				if (sEntityLump[iOffset] == '}')
+				{
+					iOffset++;
+					break;
+				}
+
+				auto sKey = ParseQuotedEntityToken(sEntityLump, iOffset);
+				auto sValue = ParseQuotedEntityToken(sEntityLump, iOffset);
+				if (!sKey.empty())
+					mKeyValues[std::move(sKey)] = std::move(sValue);
+			}
+
+			AppendPasstimeGoalFromKeyValues(mKeyValues);
+			iOutTriggers += AppendTriggerFromKeyValues(mKeyValues) ? 1 : 0;
+		}
+
+		return iOutTriggers > 0;
+	}
+
+	static bool LoadBspEntityLump(std::string& sOutEntityLump)
+	{
+		const std::string sMapName = SDK::GetLevelName();
+		if (sMapName.empty() || sMapName == "None")
+			return false;
+
+		const std::string sMapPath = std::format("maps/{}.bsp", sMapName);
+		FileHandle_t hFile = I::FileSystem->Open(sMapPath.c_str(), "rb", "GAME");
+		if (!hFile)
+			return false;
+
+		bsp_header_t tHeader = {};
+		const bool bHeaderRead = I::FileSystem->Read(&tHeader, sizeof(tHeader), hFile) == sizeof(tHeader);
+		if (!bHeaderRead || tHeader.m_iIdent != BspHeaderID)
+		{
+			I::FileSystem->Close(hFile);
+			return false;
+		}
+
+		const auto& tEntityLump = tHeader.m_aLumps[BspLumpEntities];
+		if (tEntityLump.m_iFileOffset <= 0 || tEntityLump.m_iFileLength <= 0)
+		{
+			I::FileSystem->Close(hFile);
+			return false;
+		}
+
+		std::vector<char> vEntityData(static_cast<size_t>(tEntityLump.m_iFileLength) + 1, '\0');
+		I::FileSystem->Seek(hFile, tEntityLump.m_iFileOffset, FILESYSTEM_SEEK_HEAD);
+		const int iRead = I::FileSystem->Read(vEntityData.data(), tEntityLump.m_iFileLength, hFile);
+		I::FileSystem->Close(hFile);
+		if (iRead != tEntityLump.m_iFileLength)
+			return false;
+
+		sOutEntityLump.assign(vEntityData.data(), static_cast<size_t>(tEntityLump.m_iFileLength));
+		return true;
+	}
 
 
 
@@ -129,7 +374,13 @@ std::string SDK::GetTime()
 
 std::wstring SDK::ConvertUtf8ToWide(const std::string& sSource)
 {
+	if (sSource.empty())
+		return L"";
+
 	int iSize = MultiByteToWideChar(CP_UTF8, 0, sSource.data(), -1, nullptr, 0);
+	if (iSize <= 0)
+		return L"";
+
 	std::wstring sResult(iSize, 0);
 	MultiByteToWideChar(CP_UTF8, 0, sSource.data(), -1, sResult.data(), iSize);
 	sResult.pop_back(); return sResult;
@@ -137,7 +388,13 @@ std::wstring SDK::ConvertUtf8ToWide(const std::string& sSource)
 
 std::string SDK::ConvertWideToUTF8(const std::wstring& sSource)
 {
+	if (sSource.empty())
+		return "";
+
 	int iSize = WideCharToMultiByte(CP_UTF8, 0, sSource.data(), -1, nullptr, 0, nullptr, nullptr);
+	if (iSize <= 0)
+		return "";
+
 	std::string sResult(iSize, 0);
 	WideCharToMultiByte(CP_UTF8, 0, sSource.data(), -1, sResult.data(), iSize, nullptr, nullptr);
 	sResult.pop_back(); return sResult;
@@ -357,8 +614,7 @@ void SDK::TraceHull(const Vec3& vStart, const Vec3& vEnd, const Vec3& vHullMin, 
 bool SDK::VisPos(CBaseEntity* pSkip, const CBaseEntity* pEntity, const Vec3& vFrom, const Vec3& vTo, unsigned int nMask)
 {
 	CGameTrace trace = {};
-	CTraceFilterHitscan filter = {};
-	filter.pSkip = pSkip;
+	CTraceFilterHitscan filter(pSkip);
 	Trace(vFrom, vTo, nMask, &filter, &trace);
 	if (trace.DidHit())
 		return trace.m_pEnt && trace.m_pEnt == pEntity;
@@ -367,9 +623,8 @@ bool SDK::VisPos(CBaseEntity* pSkip, const CBaseEntity* pEntity, const Vec3& vFr
 bool SDK::VisPosCollideable(CBaseEntity* pSkip, const CBaseEntity* pEntity, const Vec3& vFrom, const Vec3& vTo, unsigned int nMask)
 {
 	CGameTrace trace = {};
-	CTraceFilterCollideable filter = {};
-	filter.pSkip = pSkip;
-	filter.iType = SKIP_CHECK;
+	CTraceFilterCollideable filter(pSkip);
+	filter.m_iType = SKIP_CHECK;
 	Trace(vFrom, vTo, nMask, &filter, &trace);
 	if (trace.DidHit())
 		return trace.m_pEnt && trace.m_pEnt == pEntity;
@@ -378,8 +633,7 @@ bool SDK::VisPosCollideable(CBaseEntity* pSkip, const CBaseEntity* pEntity, cons
 bool SDK::VisPosWorld(CBaseEntity* pSkip, const CBaseEntity* pEntity, const Vec3& vFrom, const Vec3& vTo, unsigned int nMask)
 {
 	CGameTrace trace = {};
-	CTraceFilterWorldAndPropsOnly filter = {};
-	filter.pSkip = pSkip;
+	CTraceFilterWorldAndPropsOnly filter(pSkip);
 	Trace(vFrom, vTo, nMask, &filter, &trace);
 	if (trace.DidHit())
 		return trace.m_pEnt && trace.m_pEnt == pEntity;
@@ -498,6 +752,25 @@ EWeaponType SDK::GetWeaponType(CTFWeaponBase* pWeapon, EWeaponType* pSecondaryTy
 		case TF_WEAPON_BAT_GIFTWRAP:
 			if (pWeapon->HasPrimaryAmmoForShot())
 				*pSecondaryType = EWeaponType::PROJECTILE;
+			break;
+		case TF_WEAPON_LASER_POINTER:
+		{
+			auto pOwner = pWeapon->m_hOwner().Get()->As<CTFPlayer>();
+			if (pOwner && pOwner->IsPlayer())
+			{
+				auto pSentryGun = pOwner->GetObjectOfType(OBJ_SENTRYGUN)->As<CObjectSentrygun>();
+				if (pSentryGun && pSentryGun->m_bPlayerControlled() && !pSentryGun->IsDisabled() && pSentryGun->m_iUpgradeLevel() > 2 && pSentryGun->m_iAmmoRockets() != 0)
+					*pSecondaryType = EWeaponType::PROJECTILE;
+			}
+
+			break;
+		}
+		case TF_WEAPON_MECHANICAL_ARM:
+		{
+			auto pOwner = pWeapon->m_hOwner().Get()->As<CTFPlayer>();
+			if (pOwner && pOwner->IsPlayer() && pOwner->m_iMetalCount() >= 65)
+				*pSecondaryType = EWeaponType::PROJECTILE;
+		}
 		}
 	}
 
@@ -512,7 +785,7 @@ EWeaponType SDK::GetWeaponType(CTFWeaponBase* pWeapon, EWeaponType* pSecondaryTy
 	case Soldier_s_TheConcheror:
 	case Scout_s_BonkAtomicPunch:
 	case Scout_s_CritaCola:
-		EWeaponType::UNKNOWN;
+		return EWeaponType::UNKNOWN;
 	}
 
 	switch (pWeapon->GetWeaponID())
@@ -546,108 +819,13 @@ EWeaponType SDK::GetWeaponType(CTFWeaponBase* pWeapon, EWeaponType* pSecondaryTy
 	case TF_WEAPON_JAR:
 	case TF_WEAPON_JAR_MILK:
 	case TF_WEAPON_JAR_GAS:
+	case TF_WEAPON_PASSTIME_GUN:
 	case TF_WEAPON_LUNCHBOX:
 	case TF_WEAPON_GRAPPLINGHOOK:
 		return EWeaponType::PROJECTILE;
 	}
 
 	return EWeaponType::HITSCAN;
-}
-
-void SDK::CanAttack(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, const CUserCmd* pCmd, bool& bPrimary, bool& bSecondary, bool& bReloading)
-{
-	bPrimary = bSecondary = bReloading = false;
-
-	if (pWeapon->GetMaxClip1() != WEAPON_NOCLIP && !pWeapon->m_bReloadsSingly())
-	{	// dumb fix
-		float flOldCurtime = I::GlobalVars->curtime;
-		I::GlobalVars->curtime = TICKS_TO_TIME(pLocal->m_nTickBase());
-		pWeapon->CheckReload();
-		I::GlobalVars->curtime = flOldCurtime;
-	}
-
-	bool bCanAttack = pLocal->CanAttack();
-	{
-		static int iStaticItemDefinitionIndex = 0;
-		int iOldItemDefinitionIndex = iStaticItemDefinitionIndex;
-		int iNewItemDefinitionIndex = iStaticItemDefinitionIndex = pWeapon->m_iItemDefinitionIndex();
-
-		if (iNewItemDefinitionIndex != iOldItemDefinitionIndex || !bCanAttack || !pWeapon->m_iClip1())
-			F::Ticks.m_iWait = -1;
-	}
-	if (bCanAttack)
-	{
-		bPrimary = pWeapon->CanPrimaryAttack();
-		bSecondary = pWeapon->CanSecondaryAttack();
-
-		switch (pWeapon->GetWeaponID())
-		{
-		case TF_WEAPON_FLAME_BALL:
-			if (bPrimary)
-			{
-				// do this, otherwise it will be a tick behind
-				float flFrametime = TICK_INTERVAL * 100;
-				float flMeterMult = S::IHasGenericMeter_GetMeterMultiplier.Call<float>(pWeapon->m_pMeter());
-				float flRate = SDK::AttribHookValue(1.f, "item_meter_charge_rate", pWeapon) - 1;
-				float flMult = SDK::AttribHookValue(1.f, "mult_item_meter_charge_rate", pWeapon);
-				float flTankPressure = pLocal->m_flTankPressure() + flFrametime * flMeterMult / (flRate * flMult);
-
-				if (bPrimary && flTankPressure < 100.f)
-					bPrimary = bSecondary = false;
-			}
-			break;
-		case TF_WEAPON_MINIGUN:
-			if (int iState = pWeapon->As<CTFMinigun>()->m_iWeaponState(); iState != AC_STATE_FIRING && iState != AC_STATE_SPINNING || !pWeapon->HasPrimaryAmmoForShot())
-				bPrimary = false;
-			break;
-		case TF_WEAPON_FLAREGUN_REVENGE:
-			if (pCmd->buttons & IN_ATTACK2)
-				bPrimary = false;
-			break;
-		case TF_WEAPON_BAT_WOOD:
-		case TF_WEAPON_BAT_GIFTWRAP:
-			if (!pWeapon->HasPrimaryAmmoForShot())
-				bSecondary = false;
-			break;
-		case TF_WEAPON_MEDIGUN:
-		case TF_WEAPON_BUILDER:
-		case TF_WEAPON_LASER_POINTER:
-			break;
-		case TF_WEAPON_PARTICLE_CANNON:
-			if (float flChargeBeginTime = pWeapon->As<CTFParticleCannon>()->m_flChargeBeginTime(); flChargeBeginTime > 0)
-			{
-				float flTotalChargeTime = TICKS_TO_TIME(pLocal->m_nTickBase()) - flChargeBeginTime;
-				if (flTotalChargeTime < TF_PARTICLE_MAX_CHARGE_TIME)
-				{
-					bPrimary = bSecondary = false;
-					break;
-				}
-			}
-			[[fallthrough]];
-		default:
-			if (pWeapon->GetSlot() != SLOT_MELEE)
-			{
-				bool bAmmo = pWeapon->HasPrimaryAmmoForShot();
-				bool bReload = pWeapon->IsInReload();
-				if (!bAmmo && pWeapon->m_iItemDefinitionIndex() != Soldier_m_TheBeggarsBazooka)
-					bPrimary = bSecondary = false;
-				if (bReload && bAmmo && !bPrimary)
-					bReloading = true;
-			}
-		}
-		if (bPrimary)
-		{
-			switch (pWeapon->GetWeaponID())
-			{
-			case TF_WEAPON_FLAMETHROWER:
-			case TF_WEAPON_FLAME_BALL:
-			case TF_WEAPON_FLAREGUN:
-			case TF_WEAPON_FLAREGUN_REVENGE:
-				if (pLocal->IsUnderwater())
-					bPrimary = bSecondary = false;
-			}
-		}
-	}
 }
 
 int SDK::IsAttacking(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, const CUserCmd* pCmd, bool bTickBase)
@@ -743,6 +921,17 @@ int SDK::IsAttacking(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, const CUserCmd* 
 			G::Throwing = 2;
 		return iThrowTick == 1;
 	}
+	case TF_WEAPON_PASSTIME_GUN:
+	{
+		static bool bWasCharging = false;
+		const bool bCharging = pCmd->buttons & IN_ATTACK;
+		if (bCharging)
+			G::Throwing = G::CanPrimaryAttack = true;
+
+		const bool bThrown = bWasCharging && !bCharging;
+		bWasCharging = bCharging;
+		return bThrown;
+	}
 	case TF_WEAPON_GRAPPLINGHOOK:
 	{
 		if (!G::CanPrimaryAttack || !(pCmd->buttons & IN_ATTACK) || pWeapon->As<CTFGrapplingHook>()->m_hProjectile())
@@ -784,6 +973,7 @@ int SDK::IsAttacking(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, const CUserCmd* 
 		else if (G::CanSecondaryAttack && pCmd->buttons & IN_ATTACK2)
 			return 1;
 		break;
+	case TF_WEAPON_LASER_POINTER:
 	case TF_WEAPON_MECHANICAL_ARM:
 		if (G::CanSecondaryAttack && pCmd->buttons & IN_ATTACK2)
 			return 1;
@@ -826,7 +1016,7 @@ void SDK::FixMovement(CUserCmd* pCmd, const Vec3& vCurAngle, const Vec3& vTarget
 	bool bCurOOB = fabsf(Math::NormalizeAngle(vCurAngle.x)) > 90.f;
 	bool bTargetOOB = fabsf(Math::NormalizeAngle(vTargetAngle.x)) > 90.f;
 
-	Vec3 vMove = { pCmd->forwardmove, pCmd->sidemove * (bCurOOB ? -1 : 1), pCmd->upmove};
+	Vec3 vMove = { pCmd->forwardmove, pCmd->sidemove * (bCurOOB ? -1 : 1), pCmd->upmove };
 	float flSpeed = vMove.Length2D();
 	Vec3 vMoveAng = Math::VectorAngles(vMove);
 
@@ -897,13 +1087,11 @@ void SDK::WalkTo(CUserCmd* pCmd, CTFPlayer* pLocal, const Vec3& vFrom, const Vec
 	pCmd->upmove = vResult.z * flScale;
 }
 
-void SDK::WalkTo(CUserCmd* pCmd, CTFPlayer* pLocal, const Vec3& vTo, float flScale)
+void SDK::WalkTo(CUserCmd* pCmd, CTFPlayer* pLocal, Vec3 vTo, float flScale)
 {
 	Vec3 vLocalPos = pLocal->m_vecOrigin();
 	WalkTo(pCmd, pLocal, vLocalPos, vTo, flScale);
 }
-
-
 
 void SDK::GetProjectileFireSetup(CTFPlayer* pPlayer, const Vec3& vAngIn, Vec3 vOffset, Vec3& vPosOut, Vec3& vAngOut, float flForward, float flCutoff, bool bInterp, bool bAllowFlip)
 {
@@ -923,9 +1111,8 @@ void SDK::GetProjectileFireSetup(CTFPlayer* pPlayer, const Vec3& vAngIn, Vec3 vO
 		if (flCutoff < 1.f)
 		{
 			CGameTrace trace = {};
-			CTraceFilterCollideable filter = {};
-			filter.pSkip = pPlayer;
-			filter.iType = SKIP_CHECK;
+			CTraceFilterCollideable filter(pPlayer);
+			filter.m_iType = SKIP_CHECK;
 			Trace(vShootPos, vEndPos, MASK_SOLID, &filter, &trace);
 			if (trace.DidHit() && trace.fraction > flCutoff)
 				vEndPos = trace.endpos;
@@ -937,7 +1124,545 @@ void SDK::GetProjectileFireSetup(CTFPlayer* pPlayer, const Vec3& vAngIn, Vec3 vO
 		vAngOut = vAngIn;
 }
 
+//Pasted from somewhere in the valves tf2 server code
+float SDK::CalculateSplashRadiusDamageFalloff(CTFWeaponBase* pWeapon, CTFPlayer* pAttacker, CTFWeaponBaseGrenadeProj* pProjectile, float flRadius)
+{
+	float flFalloff{ 0.0f };
+	const int dmgType = pProjectile->GetDamageType();
+
+	if (dmgType & DMG_RADIUS_MAX)
+		flFalloff = 0.0f;
+	else if (dmgType & DMG_HALF_FALLOFF)
+		flFalloff = 0.5f;
+	else if (flRadius)
+		flFalloff = pProjectile->m_flDamage() / flRadius;
+	else
+		flFalloff = 1.0f;
+
+	if (pWeapon)
+	{
+		float flFalloffMod = 1.f;
+		AttribHookValue(flFalloffMod, "mult_dmg_falloff", pWeapon);
+		if (flFalloffMod != 1.f)
+			flFalloff += flFalloffMod;
+	}
+
+	if (pAttacker && pAttacker->InCond(TF_COND_RUNE_PRECISION))
+		flFalloff = 1.0f;
+	return flFalloff;
+}
+
+float SDK::CalculateSplashRadiusDamage(CTFWeaponBase* pWeapon, CTFPlayer* pAttacker, CTFWeaponBaseGrenadeProj* pProjectile, float flRadius, float flDist, float& flDamageNoBuffs, bool bSelf)
+{
+	float flFalloff{ CalculateSplashRadiusDamageFalloff(pWeapon, pAttacker, pProjectile, flRadius) };
+	float flDamage{ Math::RemapVal(flDist, 0.f, flRadius, pProjectile->m_flDamage(), pProjectile->m_flDamage() * flFalloff) };
+	flDamageNoBuffs = flDamage;
+
+	bool bCrit{ (pProjectile->GetDamageType() & DMG_CRITICAL) > 0 };
+	if (bCrit || pAttacker->IsMiniCritBoosted())
+	{
+		float flDamageBonus{ 0.f };
+		if (bCrit)
+			flDamageBonus = (TF_DAMAGE_CRIT_MULTIPLIER - 1.f) * flDamage;
+		else
+			flDamageBonus = (TF_DAMAGE_MINICRIT_MULTIPLIER - 1.f) * flDamage;
+
+		flDamage += flDamageBonus;
+	}
+
+	// Grenades & Pipebombs do less damage to ourselves.
+	if (bSelf && pWeapon)
+	{
+		switch (pWeapon->GetWeaponID())
+		{
+		case TF_WEAPON_PIPEBOMBLAUNCHER:
+		case TF_WEAPON_GRENADELAUNCHER:
+		case TF_WEAPON_CANNON:
+		case TF_WEAPON_STICKBOMB:
+			flDamage *= 0.75f;
+			flDamageNoBuffs *= 0.75f;
+			break;
+		}
+	}
+	return flDamage;
+}
+
+bool SDK::WeaponDoesNotUseAmmo(int iWeaponID, int iDefIdx, bool bIncludeInfiniteAmmo)
+{
+	switch (iDefIdx)
+	{
+	case Soldier_s_TheBuffBanner:
+	case Soldier_s_FestiveBuffBanner:
+	case Soldier_s_TheBattalionsBackup:
+	case Soldier_s_TheConcheror:
+	case Demoman_s_TheTideTurner:
+	case Demoman_s_TheCharginTarge:
+	case Demoman_s_TheSplendidScreen:
+	case Demoman_s_FestiveTarge:
+	case Demoman_m_TheBootlegger:
+	case Demoman_m_AliBabasWeeBooties:
+	case Engi_s_TheWrangler:
+	case Engi_s_FestiveWrangler:
+	case Sniper_s_CozyCamper:
+	case Sniper_s_DarwinsDangerShield:
+	case Sniper_s_TheRazorback:
+	case Pyro_s_ThermalThruster: return true;
+	default:
+	{
+		switch (iWeaponID)
+		{
+		case TF_WEAPON_PARTICLE_CANNON:
+		case TF_WEAPON_RAYGUN:
+		case TF_WEAPON_DRG_POMSON: return bIncludeInfiniteAmmo;
+		case TF_WEAPON_FLAREGUN_REVENGE:
+		case TF_WEAPON_MEDIGUN:
+		case TF_WEAPON_PDA:
+		case TF_WEAPON_PDA_ENGINEER_BUILD:
+		case TF_WEAPON_PDA_ENGINEER_DESTROY:
+		case TF_WEAPON_PDA_SPY:
+		case TF_WEAPON_PDA_SPY_BUILD:
+		case TF_WEAPON_BUILDER:
+		case TF_WEAPON_INVIS:
+		case TF_WEAPON_LUNCHBOX:
+		case TF_WEAPON_THROWABLE:
+		case TF_WEAPON_JAR:
+		case TF_WEAPON_JAR_GAS:
+		case TF_WEAPON_JAR_MILK:
+		case TF_WEAPON_GRAPPLINGHOOK: return true;
+		default: return false;
+		}
+		break;
+	}
+	}
+}
+
+bool SDK::WeaponDoesNotUseAmmo(CTFWeaponBase* pWeapon, bool bIncludeInfiniteAmmo)
+{
+	return WeaponDoesNotUseAmmo(pWeapon->GetWeaponID(), pWeapon->m_iItemDefinitionIndex(), bIncludeInfiniteAmmo);
+}
+
+// Is there a way of doing this without hardcoded numbers???
+int SDK::GetWeaponMaxReserveAmmo(int WeaponID, int DefIdx)
+{
+	switch (DefIdx)
+	{
+	case Engi_m_TheWidowmaker:
+	case Engi_s_TheShortCircuit:
+		return 200;
+	case Scout_m_ForceANature:
+	case Scout_m_FestiveForceANature:
+	case Scout_m_BackcountryBlaster:
+		return 32;
+	case Demoman_s_TheQuickiebombLauncher:
+		return 24;
+	case Demoman_s_TheScottishResistance:
+		return 36;
+	case Demoman_s_StickyJumper:
+		return 72;
+	case Soldier_m_RocketJumper:
+		return 60;
+	default:
+	{
+		switch (WeaponID)
+		{
+		case TF_WEAPON_MINIGUN:
+		case TF_WEAPON_PISTOL:
+		case TF_WEAPON_FLAMETHROWER:
+			return 200;
+		case TF_WEAPON_SYRINGEGUN_MEDIC:
+			return 150;
+		case TF_WEAPON_SMG:
+			return 75;
+		case TF_WEAPON_FLAME_BALL:
+			return 40;
+		case TF_WEAPON_CROSSBOW:
+			return 38;
+		case TF_WEAPON_HANDGUN_SCOUT_SECONDARY:
+		case TF_WEAPON_PISTOL_SCOUT:
+		case TF_WEAPON_HANDGUN_SCOUT_PRIMARY:
+			return 36;
+		case TF_WEAPON_SCATTERGUN:
+		case TF_WEAPON_PEP_BRAWLER_BLASTER:
+		case TF_WEAPON_SODA_POPPER:
+		case TF_WEAPON_SHOTGUN_HWG:
+		case TF_WEAPON_SHOTGUN_PRIMARY:
+		case TF_WEAPON_SHOTGUN_PYRO:
+		case TF_WEAPON_SHOTGUN_SOLDIER:
+			return 32;
+		case TF_WEAPON_SNIPERRIFLE:
+		case TF_WEAPON_SNIPERRIFLE_CLASSIC:
+		case TF_WEAPON_SNIPERRIFLE_DECAP:
+			return 25;
+		case TF_WEAPON_STICKBOMB:
+		case TF_WEAPON_STICKY_BALL_LAUNCHER:
+		case TF_WEAPON_REVOLVER:
+			return 24;
+		case TF_WEAPON_ROCKETLAUNCHER:
+		case TF_WEAPON_ROCKETLAUNCHER_DIRECTHIT:
+			return 20;
+		case TF_WEAPON_CANNON:
+		case TF_WEAPON_SHOTGUN_BUILDING_RESCUE:
+		case TF_WEAPON_GRENADELAUNCHER:
+		case TF_WEAPON_FLAREGUN:
+			return 16;
+		case TF_WEAPON_COMPOUND_BOW:
+			return 12;
+		default:
+			break;
+		}
+		break;
+	}
+	}
+
+	return 32;
+}
+
+bool SDK::BuildTriggerGeometry(TriggerData_t& tTrigger)
+{
+	if (!tTrigger.m_pModel)
+		return false;
+
+	tTrigger.m_vBrushSurfaces.clear();
+	tTrigger.m_vCenter = {};
+
+	const int iNumSurfaces = tTrigger.m_pModel->brush.nummodelsurfaces;
+	const bool bShouldRotate = !tTrigger.m_vRotate.IsZero();
+	Vector vTopSurfCenter = { 0, -FLT_MAX, 0 }, vBottomSurfCenter = { 0, FLT_MAX, 0 };
+	for (int i = 0; i < iNumSurfaces; i++)
+	{
+		const int iSurfaceIdx = tTrigger.m_pModel->brush.firstmodelsurface + i;
+		auto pBrushData = tTrigger.m_pModel->brush.pShared;
+
+		const auto uSurfacePtr = reinterpret_cast<uintptr_t>(pBrushData->surfaces2) + (iSurfaceIdx << 6);
+		const auto uVertCount = *reinterpret_cast<char*>(uSurfacePtr + 3);
+		const auto iFirstVertIndex = *reinterpret_cast<int*>(uSurfacePtr + 12);
+
+		Vector vFirstPoint = pBrushData->vertexes[pBrushData->vertindices[iFirstVertIndex]].position, vLastPoint;
+		std::vector<Vector> vPoints{ bShouldRotate ? vFirstPoint : tTrigger.m_vOrigin + vFirstPoint };
+
+		Vector vSurfaceCenter = {};
+		float flTotalArea = 0.0f;
+		for (int j = 1; j < uVertCount; j++)
+		{
+			const auto iVertIdx = pBrushData->vertindices[iFirstVertIndex + j];
+			const Vector vCurrentPoint = pBrushData->vertexes[iVertIdx].position;
+			if (j > 1)
+			{
+				const Vector vNormal = (vCurrentPoint - vLastPoint).Cross(vCurrentPoint - vFirstPoint);
+				const float flArea = vNormal.Length();
+				flTotalArea += flArea;
+				vSurfaceCenter += (vFirstPoint + vLastPoint + vCurrentPoint) * flArea / 3.0f;
+			}
+			Vector vFinal = vCurrentPoint;
+			if (bShouldRotate)
+				vFinal = Math::RotatePoint(vCurrentPoint, {}, tTrigger.m_vRotate);
+			vPoints.push_back(tTrigger.m_vOrigin + vFinal);
+			vLastPoint = vCurrentPoint;
+		}
+
+		if (flTotalArea)
+			vSurfaceCenter /= flTotalArea;
+
+		if (bShouldRotate)
+		{
+			auto& vFirstRotated = vPoints.front();
+			vSurfaceCenter = Math::RotatePoint(vSurfaceCenter, {}, tTrigger.m_vRotate);
+			vFirstRotated = tTrigger.m_vOrigin + Math::RotatePoint(vFirstRotated, {}, tTrigger.m_vRotate);
+		}
+
+		if (vBottomSurfCenter.y > vSurfaceCenter.y)
+			vBottomSurfCenter = vSurfaceCenter;
+		if (vTopSurfCenter.y < vSurfaceCenter.y)
+			vTopSurfCenter = vSurfaceCenter;
+
+		vSurfaceCenter += tTrigger.m_vOrigin;
+		tTrigger.m_vBrushSurfaces.push_back(BrushSurface_t(vSurfaceCenter, vPoints));
+	}
+
+	tTrigger.m_vCenter = tTrigger.m_vOrigin + Vector(vBottomSurfCenter.x, vBottomSurfCenter.y + (vTopSurfCenter.y - vBottomSurfCenter.y) / 2, vBottomSurfCenter.z);
+	return !tTrigger.m_vBrushSurfaces.empty();
+}
+
+bool SDK::RefreshTriggerStorage(bool bForce)
+{
+	if (!I::EngineClient->IsInGame())
+		return false;
+
+	static Timer tRetryTimer = {};
+	static std::string sLastMap = {};
+	const std::string sMapName = SDK::GetLevelName();
+	if (sMapName != sLastMap)
+	{
+		sLastMap = sMapName;
+		tRetryTimer.Update();
+	}
+
+	if (!bForce && !G::TriggerStorage.empty() && F::NavEngine.HasRespawnRooms())
+		return true;
+	if (!bForce && !tRetryTimer.Run(1.0f))
+		return false;
+
+	std::string sEntityLump = {};
+	if (!LoadBspEntityLump(sEntityLump))
+		return false;
+
+	const auto vOldTriggers = G::TriggerStorage;
+	const auto vOldPasstimeGoals = G::PasstimeGoalStorage;
+	const auto vOldRespawnRooms = F::NavEngine.GetRespawnRooms();
+	G::TriggerStorage.clear();
+	G::PasstimeGoalStorage.clear();
+	F::NavEngine.ClearRespawnRooms();
+
+	int iTriggerCount = 0;
+	if (!BuildTriggerStorageFromEntityLump(sEntityLump, iTriggerCount))
+	{
+		G::TriggerStorage = vOldTriggers;
+		G::PasstimeGoalStorage = vOldPasstimeGoals;
+		for (const auto& tRespawnRoom : vOldRespawnRooms)
+			F::NavEngine.AddRespawnRoom(tRespawnRoom.m_iTeam, tRespawnRoom.tData);
+		return false;
+	}
+
+	if (Vars::Debug::Logging.Value)
+	{
+		SDK::Output("TriggerStorage", std::format(
+			"Refresh: map={} triggers={} respawn_rooms={} passtime_goals={}",
+			sMapName, iTriggerCount, F::NavEngine.GetRespawnRooms().size(), G::PasstimeGoalStorage.size()).c_str(),
+			{ 180, 220, 255 }, OUTPUT_CONSOLE | OUTPUT_DEBUG);
+	}
+
+	return true;
+}
+
+int SDK::GetPasstimeGoalMapTeam(const Vec3& vOrigin, std::string* pTargetname)
+{
+	constexpr float flMaxMatchDistSqr = 256.0f * 256.0f;
+
+	const PasstimeMapGoalData_t* pBestGoal = nullptr;
+	float flBestDist = flMaxMatchDistSqr;
+	for (const auto& tGoal : G::PasstimeGoalStorage)
+	{
+		const float flDist = tGoal.m_vOrigin.DistToSqr(vOrigin);
+		if (!pBestGoal || flDist < flBestDist)
+		{
+			pBestGoal = &tGoal;
+			flBestDist = flDist;
+		}
+	}
+
+	if (!pBestGoal)
+		return TEAM_UNASSIGNED;
+
+	if (pTargetname)
+		*pTargetname = pBestGoal->m_sTargetname;
+	return pBestGoal->m_iTeam;
+}
+
+std::string SDK::GetLevelName()
+{
+	const std::string name = I::EngineClient->GetLevelName();
+	if (name.empty())
+		return "None";
+
+	const char* data = name.data();
+	const size_t length = name.length();
+	size_t slash = 0;
+	size_t bsp = length;
+
+	for (size_t i = length - 1; i != std::string::npos; --i)
+	{
+		if (data[i] == '/')
+		{
+			slash = i + 1;
+			break;
+		}
+		if (data[i] == '.')
+			bsp = i;
+	}
+
+	return { data + slash, bsp - slash };
+}
+
+bool TriggerData_t::PointIsWithin(Vec3 vPoint) const
+{
+	CGameTrace trace;
+	Ray_t ray;
+	ray.Init(vPoint, vPoint);
+	S::CM_TransformedBoxTrace.Call<void>(ray, m_pModel->brush.firstnode, 0x0/*i dont think mask matters here*/, m_vOrigin, Vec3(), &trace);
+	return trace.startsolid;
+}
+
 bool SDK::CleanScreenshot()
 {
 	return Vars::Visuals::UI::CleanScreenshots.Value && I::EngineClient->IsTakingScreenshot();
+}
+
+void SDK::CanAttack(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, const CUserCmd* pCmd, bool& bPrimary, bool& bSecondary, bool& bReloading)
+{
+	bPrimary = bSecondary = bReloading = false;
+
+	if (pWeapon->GetMaxClip1() != WEAPON_NOCLIP && !pWeapon->m_bReloadsSingly())
+	{	// dumb fix
+		float flOldCurtime = I::GlobalVars->curtime;
+		I::GlobalVars->curtime = TICKS_TO_TIME(pLocal->m_nTickBase());
+		pWeapon->CheckReload();
+		I::GlobalVars->curtime = flOldCurtime;
+	}
+
+	for (int i = 0; i <= SLOT_PDA2; i++)
+	{
+		auto pWeaponInSlot = pLocal->GetWeaponFromSlot(i);
+		if (pWeaponInSlot)
+		{
+			int iDefIndex = pWeaponInSlot->m_iItemDefinitionIndex(), iWeaponID = pWeaponInSlot->GetWeaponID();
+			int iActualWeaponSlot = pWeaponInSlot->GetSlot(); // this whole thing is fucked up
+			if (iActualWeaponSlot < SLOT_PRIMARY || iActualWeaponSlot > SLOT_PDA2)
+				continue;
+
+			G::SavedWepSlots[i] = iActualWeaponSlot;
+			G::SavedDefIndexes[iActualWeaponSlot] = iDefIndex;
+			G::SavedWepIds[iActualWeaponSlot] = iWeaponID;
+
+			if (iActualWeaponSlot < SLOT_MELEE)
+			{
+				G::AmmoInSlot[iActualWeaponSlot].m_iClip = pWeaponInSlot->m_iClip1();
+				G::AmmoInSlot[iActualWeaponSlot].m_iReserve = pLocal->GetAmmoCount(pWeaponInSlot->m_iPrimaryAmmoType());
+				if (G::SavedDefIndexes[iActualWeaponSlot] != iDefIndex 
+					|| G::SavedWepIds[iActualWeaponSlot] != iWeaponID)
+				{
+					G::AmmoInSlot[iActualWeaponSlot].m_iMaxClip = pWeaponInSlot->m_pWeaponInfo() ? pWeaponInSlot->m_pWeaponInfo()->iMaxClip1 : 0;
+					G::AmmoInSlot[iActualWeaponSlot].m_iMaxReserve = SDK::GetWeaponMaxReserveAmmo(iWeaponID, iDefIndex);
+					G::AmmoInSlot[iActualWeaponSlot].m_bUsesAmmo = !SDK::WeaponDoesNotUseAmmo(iWeaponID, iDefIndex);
+				}
+			}
+			else if (i < SLOT_MELEE) // TODO: remember why i added this shit
+				G::AmmoInSlot[i].m_bUsesAmmo = false;
+
+			if (iActualWeaponSlot <= SLOT_MELEE)
+				G::HasWeaponForSlot[iActualWeaponSlot] = true;
+		}
+		else
+		{
+			int iActualWeaponSlot = G::SavedWepSlots[i];
+			if (iActualWeaponSlot < SLOT_PRIMARY || iActualWeaponSlot > SLOT_MELEE)
+				continue;
+
+			G::HasWeaponForSlot[iActualWeaponSlot] = false;
+		}
+	}
+
+	bool bCanAttack = pLocal->CanAttack();
+	{
+		static int iStaticItemDefinitionIndex = 0;
+		int iOldItemDefinitionIndex = iStaticItemDefinitionIndex;
+		int iNewItemDefinitionIndex = iStaticItemDefinitionIndex = pWeapon->m_iItemDefinitionIndex();
+
+		if (iNewItemDefinitionIndex != iOldItemDefinitionIndex || !bCanAttack || !pWeapon->m_iClip1())
+			F::Ticks.m_iWait = -1;
+	}
+	if (bCanAttack)
+	{
+		bPrimary = pWeapon->CanPrimaryAttack();
+		bSecondary = pWeapon->CanSecondaryAttack();
+
+		switch (pWeapon->GetWeaponID())
+		{
+		case TF_WEAPON_FLAME_BALL:
+			if (bPrimary)
+			{
+				// do this, otherwise it will be a tick behind
+				float flFrametime = TICK_INTERVAL * 100;
+				float flMeterMult = S::IHasGenericMeter_GetMeterMultiplier.Call<float>(pWeapon->m_pMeter());
+				float flRate = SDK::AttribHookValue(1.f, "item_meter_charge_rate", pWeapon) - 1;
+				float flMult = SDK::AttribHookValue(1.f, "mult_item_meter_charge_rate", pWeapon);
+				float flTankPressure = pLocal->m_flTankPressure() + flFrametime * flMeterMult / (flRate * flMult);
+
+				if (bPrimary && flTankPressure < 100.f)
+					bPrimary = bSecondary = false;
+			}
+			break;
+		case TF_WEAPON_MINIGUN:
+			if (int iState = pWeapon->As<CTFMinigun>()->m_iWeaponState(); iState != AC_STATE_FIRING && iState != AC_STATE_SPINNING || !pWeapon->HasPrimaryAmmoForShot())
+				bPrimary = false;
+			break;
+		case TF_WEAPON_FLAREGUN_REVENGE:
+			if (pCmd->buttons & IN_ATTACK2)
+				bPrimary = false;
+			break;
+		case TF_WEAPON_BAT_WOOD:
+		case TF_WEAPON_BAT_GIFTWRAP:
+			if (!pWeapon->HasPrimaryAmmoForShot())
+				bSecondary = false;
+			break;
+		case TF_WEAPON_MEDIGUN:
+		case TF_WEAPON_BUILDER:
+			break;
+		case TF_WEAPON_LASER_POINTER:
+		{
+			auto pSentry = pLocal->GetObjectOfType(OBJ_SENTRYGUN)->As<CObjectSentrygun>();
+			if (!pSentry || !pSentry->m_bPlayerControlled() || pSentry->IsDisabled())
+			{
+				bPrimary = bSecondary = false;
+				break;
+			}
+			if (G::WranglerSecondFireTime + 2.25f < I::GlobalVars->curtime)
+			{
+				int iLocalTeam = pLocal->m_iTeamNum();
+				Vec3 vSentryPos = pSentry->GetAbsOrigin();
+				for (auto pRocket : H::Entities.GetGroup(EntityEnum::WorldProjectile))
+				{
+					if (pRocket->m_iTeamNum() == iLocalTeam &&
+						pRocket->m_hOwnerEntity().Get() == pSentry &&
+						pRocket->GetAbsOrigin().DistTo(vSentryPos) <= 1000.f)
+					{
+						G::WranglerSecondFireTime = I::GlobalVars->curtime;
+						break;
+					}
+				}
+			}
+			if (pSentry->m_iAmmoShells() <= 0) G::CanPrimaryAttack = false;
+			if (pSentry->m_iUpgradeLevel() <= 2 || pSentry->m_iAmmoRockets() <= 0)
+			{
+				bSecondary = false;
+				G::WranglerSecondFireTime = 0.f;
+			}
+			else bSecondary = I::GlobalVars->curtime - G::WranglerSecondFireTime > 2.25f;
+
+			break;
+		}
+		case TF_WEAPON_PARTICLE_CANNON:
+			if (float flChargeBeginTime = pWeapon->As<CTFParticleCannon>()->m_flChargeBeginTime(); flChargeBeginTime > 0)
+			{
+				float flTotalChargeTime = TICKS_TO_TIME(pLocal->m_nTickBase()) - flChargeBeginTime;
+				if (flTotalChargeTime < TF_PARTICLE_MAX_CHARGE_TIME)
+				{
+					bPrimary = bSecondary = false;
+					break;
+				}
+			}
+			[[fallthrough]];
+		default:
+			if (pWeapon->GetSlot() != SLOT_MELEE)
+			{
+				bool bAmmo = pWeapon->HasPrimaryAmmoForShot();
+				bool bReload = pWeapon->IsInReload();
+				if (!bAmmo && pWeapon->m_iItemDefinitionIndex() != Soldier_m_TheBeggarsBazooka)
+					bPrimary = bSecondary = false;
+				if (bReload && bAmmo && !bPrimary)
+					bReloading = true;
+			}
+		}
+		if (bPrimary)
+		{
+			switch (pWeapon->GetWeaponID())
+			{
+			case TF_WEAPON_FLAMETHROWER:
+			case TF_WEAPON_FLAME_BALL:
+			case TF_WEAPON_FLAREGUN:
+			case TF_WEAPON_FLAREGUN_REVENGE:
+				if (pLocal->IsUnderwater())
+					bPrimary = bSecondary = false;
+			}
+		}
+	}
 }

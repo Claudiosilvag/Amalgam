@@ -253,7 +253,7 @@ public:
 	{
 		return Max(v1).Min(v2);
 	}
-
+	
 	inline Vec2 Lerp(const Vec2& v, float t) const
 	{
 		return { Math::Lerp(x, v.x, t), Math::Lerp(y, v.y, t) };
@@ -551,11 +551,6 @@ public:
 		return { x, y };
 	}
 
-	inline Vec3 Get2D() const
-	{
-		return Vec3(x, y, 0);
-	}
-
 	inline Vec3 Pow(float flPower) const
 	{
 		return Vec3(powf(x, flPower), powf(y, flPower), powf(z, flPower));
@@ -687,6 +682,11 @@ public:
 		return Vec3(x * flLengthNormal, y * flLengthNormal);
 	}
 
+	inline Vec2 Get2D() const
+	{
+		return { x, y };
+	}
+	
 	inline float DistTo(const Vec3& v) const
 	{
 		return (*this - v).Length();
@@ -735,6 +735,7 @@ public:
 				 Math::Rad2Deg(atan2(y, x)),
 				 0.f };
 	}
+
 	inline Vec3 FromAngle() const noexcept
 	{
 		return { cos(Math::Deg2Rad(x)) * cos(Math::Deg2Rad(y)),
@@ -1099,15 +1100,33 @@ struct Gradient_t
 	}
 };
 
+struct ChamsMaterial_t
+{
+	Color_t tColor = Color_t();
+	float flStart = 0.f;
+	float flEnd = 8192.f;
+	bool bSmoothAlpha = false;
+
+	inline bool operator!=(const ChamsMaterial_t& t) const
+	{
+		return tColor != t.tColor || flStart != t.flStart || flEnd != t.flEnd || bSmoothAlpha != t.bSmoothAlpha;
+	}
+
+	inline bool operator==(const ChamsMaterial_t& t) const
+	{
+		return tColor == t.tColor && flStart == t.flStart && flEnd == t.flEnd && bSmoothAlpha == t.bSmoothAlpha;
+	}
+};
+
 struct Chams_t
 {
 private:
-	static inline const std::vector<std::pair<std::string, Color_t>> s_vNone = std::vector<std::pair<std::string, Color_t>>{ { "None", {} } };
-	static inline const std::vector<std::pair<std::string, Color_t>> s_vOriginal = std::vector<std::pair<std::string, Color_t>>{ { "Original", {} } };
+	static inline const std::vector<std::pair<std::string, ChamsMaterial_t>> s_vNone = std::vector<std::pair<std::string, ChamsMaterial_t>>{ { "None", ChamsMaterial_t() } };
+	static inline const std::vector<std::pair<std::string, ChamsMaterial_t>> s_vOriginal = std::vector<std::pair<std::string, ChamsMaterial_t>>{ { "Original", ChamsMaterial_t() } };
 
 public:
-	std::vector<std::pair<std::string, Color_t>> Visible = { { "Original", Color_t() } };
-	std::vector<std::pair<std::string, Color_t>> Occluded = {};
+	std::vector<std::pair<std::string, ChamsMaterial_t>> Visible = { { "Original", ChamsMaterial_t() } };
+	std::vector<std::pair<std::string, ChamsMaterial_t>> Occluded = {};
 
 	inline bool operator==(const Chams_t& t) const
 	{
@@ -1124,14 +1143,39 @@ public:
 		return (bDefault ? Visible != s_vOriginal : !Visible.empty()) || !Occluded.empty();
 	}
 
-	const std::vector<std::pair<std::string, Color_t>>& GetVisible() const
+	const std::vector<std::pair<std::string, ChamsMaterial_t>>& GetVisible() const
 	{
 		return !Visible.empty() ? Visible : s_vNone;
 	}
 
-	const std::vector<std::pair<std::string, Color_t>>& GetOccluded() const
+	const std::vector<std::pair<std::string, ChamsMaterial_t>>& GetOccluded() const
 	{
 		return !Occluded.empty() ? Occluded : s_vNone;
+	}
+};
+
+struct ESP_t
+{
+	int		Draw = 0b0;
+
+	byte	BackgroundOpacity = 200;
+	float	Start = 0.f;
+	float	End = 8192.f;
+	bool	SmoothAlpha = true;
+
+	inline bool operator==(const ESP_t& t) const
+	{
+		return Draw == t.Draw && BackgroundOpacity == t.BackgroundOpacity && Start == t.Start && End == t.End && SmoothAlpha == t.SmoothAlpha;
+	}
+
+	inline bool operator!=(const ESP_t& t) const
+	{
+		return Draw != t.Draw || BackgroundOpacity != t.BackgroundOpacity || Start != t.Start || End != t.End || SmoothAlpha != t.SmoothAlpha;
+	}
+
+	inline bool operator()() const
+	{
+		return Draw;
 	}
 };
 
@@ -1140,14 +1184,18 @@ struct Glow_t
 	int Stencil = 0;
 	float Blur = 0;
 
+	float	Start = 0.f;
+	float	End = 8192.f;
+	bool	SmoothAlpha = true;
+
 	inline bool operator==(const Glow_t& t) const
 	{
-		return Stencil == t.Stencil && Blur == t.Blur;
+		return Stencil == t.Stencil && Blur == t.Blur && Start == t.Start && End == t.End && SmoothAlpha == t.SmoothAlpha;
 	}
 
 	inline bool operator!=(const Glow_t& t) const
 	{
-		return Stencil != t.Stencil || Blur != t.Blur;
+		return Stencil != t.Stencil || Blur != t.Blur || Start != t.Start || End != t.End || SmoothAlpha != t.SmoothAlpha;
 	}
 
 	inline bool operator()() const

@@ -5,6 +5,8 @@
 #include "../../Simulation/MovementSimulation/MovementSimulation.h"
 #include "../../Simulation/ProjectileSimulation/ProjectileSimulation.h"
 
+struct PasstimeGoalInfo;
+
 Enum(PointFlags, None = 0, Regular = 1 << 0, Lob = 1 << 1)
 Enum(PointType, Direct, Geometry, Air)
 Enum(CalculateFlags, None = 0, TwoPass = 1 << 0, SetupClip = 1 << 1, AccountDrag = 1 << 2, LobAngle = 1 << 3, Accuracy = TwoPass | SetupClip | AccountDrag)
@@ -103,12 +105,16 @@ private:
 
 	int CanHit(Target_t& tTarget, CTFPlayer* pLocal, CTFWeaponBase* pWeapon, bool bUpdate = true);
 	bool RunMain(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd);
+	bool RunMechArm(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd);
 
+	std::vector<Target_t> GetProjectiles(CTFPlayer* pLocal);
+
+	bool CanHitProjectile(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, Target_t& tTarget, int iSimTicks);
 	bool CanHit(Target_t& tTarget, CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CBaseEntity* pProjectile);
 	bool TestAngle(CBaseEntity* pProjectile, const Vec3& vPoint, Vec3& vAngles, int iSimTime, uint8_t iType, uint8_t iFlags);
 
-	bool Aim(const Vec3& vCurAngle, const Vec3& vToAngle, Vec3& vOut, int iMethod = Vars::Aimbot::General::AimType.Value);
-	void Aim(CUserCmd* pCmd, Vec3& vAngles, int iMethod = Vars::Aimbot::General::AimType.Value);
+	bool Aim(const Vec3& vCurAngle, const Vec3& vToAngle, Vec3& vOut);
+	void Aim(CUserCmd* pCmd, Vec3& vAngles);
 
 	Info_t m_tInfo = {};
 	MoveStorage m_tMoveStorage = {};
@@ -116,27 +122,80 @@ private:
 	std::vector<Setup_t> m_vSplashPoints = {};
 
 	bool m_bLastTickHeld = false;
+	struct PasstimeThrowState_t
+	{
+		bool m_bHolding = false;
+		int m_iHoldTicks = 0;
+		int m_iTargetEnt = 0;
+		Vec3 m_vAngle = {};
+		float m_flCooldownUntil = 0.0f;
+
+		void Reset(float flCooldown = 0.0f)
+		{
+			m_bHolding = false;
+			m_iHoldTicks = 0;
+			m_iTargetEnt = 0;
+			m_vAngle = {};
+			m_flCooldownUntil = flCooldown;
+		}
+	} m_tPasstimeThrow;
 
 	float m_flTimeTo = std::numeric_limits<float>::max();
+	std::vector<Vec3> m_vBestPlayerPath = {};
 	std::vector<Vec3> m_vPlayerPath = {};
 	std::vector<Vec3> m_vProjectilePath = {};
 	std::vector<DrawBox_t> m_vBoxes = {};
-
 	Vec3 m_vAngleTo = {};
 	Vec3 m_vPredicted = {};
 	Vec3 m_vTarget = {};
+	Vec3 m_vShootPos = {};
+	Vec3 m_vPlainAngles = {};
 
+	int m_iWeaponID = -1;
+	int m_iMethod = -1;
 	int m_iResult = false;
 	bool m_bUpdate = true;
+	bool m_bBestPlayerPathSet = false;
+	bool m_bBlockAimAnglesDraw = false;
+
+	struct GrappleInfo_t
+	{
+		float m_flRanTime = 0.f;
+		float m_flLastTimeTo = std::numeric_limits<float>::max();
+		bool m_bGrapplingHookShot = false;
+		bool m_bWallOnMiss = false;
+		bool m_bFail = false;
+		Vec3 m_vLastGrapplePoint = {};
+		Vec3 m_vLastAngleTo = {};
+
+		inline void Fail()
+		{
+			m_flRanTime = 0.f;
+			m_flLastTimeTo = std::numeric_limits<float>::max();
+			m_bGrapplingHookShot = false;
+			m_bWallOnMiss = false;
+			m_bFail = true;
+			m_vLastGrapplePoint = {};
+			m_vLastAngleTo = {};
+		}
+	} m_tGrappleInfo;
+	CTFGrapplingHook* m_pGrapplingHook = nullptr;
+	CObjectSentrygun* m_pSentryGun = nullptr;
 
 public:
 	void Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd);
+	void RunGrapplingHook(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd);
+	bool AimPasstimePass(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd);
 	float GetSplashRadius(CTFWeaponBase* pWeapon, CTFPlayer* pPlayer, float flScale = 1.f);
 
 	bool AutoAirblast(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd, CBaseEntity* pProjectile);
 	float GetSplashRadius(CBaseEntity* pProjectile, CTFWeaponBase* pWeapon = nullptr, CTFPlayer* pPlayer = nullptr, float flScale = 1.f);
+	bool HandlePasstimeThrowInput(CUserCmd* pCmd, const Vec3& vAngle, int iTargetEnt);
 
 	int m_iLastTickCancel = 0;
+	int m_iAimLock = 0;
+	Vec3 m_vAimAngles = {};
+	float m_flAimAnglesSetTime = 0.f;
 };
 
 ADD_FEATURE(CAimbotProjectile, AimbotProjectile);

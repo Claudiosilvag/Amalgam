@@ -29,7 +29,7 @@ private:
 	int m_iWaitingForTarget = -1;
 	float m_flWaitingForDamage = 0.f;
 	bool m_bWaitingForHeadshot = false;
-
+	
 	float m_flLastYawCycle = 0.f;
 	float m_flLastPitchCycle = 0.f;
 	float m_flLastMinwalkCycle = 0.f;

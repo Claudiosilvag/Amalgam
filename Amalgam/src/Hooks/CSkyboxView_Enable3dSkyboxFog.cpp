@@ -7,6 +7,7 @@ MAKE_HOOK(CSkyboxView_Enable3dSkyboxFog, S::CSkyboxView_Enable3dSkyboxFog(), voi
 {
 	DEBUG_RETURN(CSkyboxView_Enable3dSkyboxFog, rcx);
 
+#ifndef TEXTMODE
 	if (!(Vars::Visuals::World::Modulations.Value & Vars::Visuals::World::ModulationsEnum::Fog) || SDK::CleanScreenshot())
 		return CALL_ORIGINAL(rcx);
 
@@ -25,4 +26,5 @@ MAKE_HOOK(CSkyboxView_Enable3dSkyboxFog, S::CSkyboxView_Enable3dSkyboxFog(), voi
 		else
 			pRenderContext->FogMode(MATERIAL_FOG_NONE);
 	}
+#endif
 }

@@ -1,3 +1,4 @@
+#ifndef TEXTMODE
 #include "../SDK/SDK.h"
 
 #include "../Features/Players/PlayerUtils.h"
@@ -114,3 +115,4 @@ MAKE_HOOK(CTFClientScoreBoardDialog_OnCommand, S::CTFClientScoreBoardDialog_OnCo
 		CALL_ORIGINAL(rcx, command);
 	}
 }
+#endif

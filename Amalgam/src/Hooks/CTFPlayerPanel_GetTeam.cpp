@@ -1,9 +1,11 @@
 #include "../SDK/SDK.h"
-
+#ifndef TEXTMODE
 #include "../Features/Players/PlayerUtils.h"
 
 MAKE_SIGNATURE(CTFPlayerPanel_GetTeam, "client.dll", "8B 91 ? ? ? ? 83 FA ? 74 ? 48 8B 05", 0x0);
+#endif
 MAKE_SIGNATURE(vgui_Panel_SetBgColor, "client.dll", "89 91 ? ? ? ? C3 CC CC CC CC CC CC CC CC CC 48 8B 41", 0x0);
+#ifndef TEXTMODE
 MAKE_SIGNATURE(CTFTeamStatusPlayerPanel_Update_GetTeam_Call, "client.dll", "8B 9F ? ? ? ? 40 32 F6", 0x0);
 MAKE_SIGNATURE(CTFTeamStatusPlayerPanel_Update_SetBgColor_Call, "client.dll", "48 8B 8F ? ? ? ? 4C 8B 6C 24 ? 48 85 C9 0F 84 ? ? ? ? 40 38 B7", 0x0);
 MAKE_SIGNATURE(CTFTeamStatus_OnTick, "client.dll", "48 89 5C 24 ? 57 48 83 EC ? 48 8B 01 48 8B F9 FF 90 ? ? ? ? 48 8B CF 0F B6 D8", 0x0);
@@ -56,12 +58,13 @@ MAKE_HOOK(CTFPlayerPanel_GetTeam, S::CTFPlayerPanel_GetTeam(), int,
 
 	return iReturn;
 }
-
+#endif
 MAKE_HOOK(vgui_Panel_SetBgColor, S::vgui_Panel_SetBgColor(), void,
 	void* rcx, Color_t color)
 {
 	DEBUG_RETURN(CTFPlayerPanel_GetTeam, rcx, color);
 
+#ifndef TEXTMODE
 	const auto dwRetAddr = uintptr_t(_ReturnAddress());
 	const auto dwDesired = S::CTFTeamStatusPlayerPanel_Update_SetBgColor_Call();
 
@@ -69,8 +72,9 @@ MAKE_HOOK(vgui_Panel_SetBgColor, S::vgui_Panel_SetBgColor(), void,
 		SetScoreboardColor(s_iPlayerIndex, color);
 
 	CALL_ORIGINAL(rcx, color);
+#endif
 }
-
+#ifndef TEXTMODE
 MAKE_HOOK(CTFTeamStatus_OnTick, S::CTFTeamStatus_OnTick(), void,
 	void* rcx)
 {
@@ -98,3 +102,4 @@ MAKE_HOOK(CVGui_RunFrame, S::CVGui_RunFrame(), void,
 
 	CALL_ORIGINAL(rcx);
 }
+#endif

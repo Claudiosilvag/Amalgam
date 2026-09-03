@@ -1,3 +1,4 @@
+#ifndef TEXTMODE
 #include "../SDK/SDK.h"
 
 #include "../Features/Players/PlayerUtils.h"
@@ -11,3 +12,4 @@ MAKE_HOOK(CPlayerResource_GetPlayerName, S::CPlayerResource_GetPlayerName(), con
 
 	return F::PlayerUtils.GetPlayerName(iIndex, CALL_ORIGINAL(rcx, iIndex));
 }
+#endif

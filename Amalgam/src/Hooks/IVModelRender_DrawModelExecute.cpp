@@ -11,35 +11,39 @@ MAKE_SIGNATURE(CBaseViewModel_DrawModel, "client.dll", "40 53 55 56 48 83 EC ? 8
 static bool s_bDrawingViewmodel = false;
 
 MAKE_HOOK(IVModelRender_DrawModelExecute, U::Memory.GetVirtual(I::ModelRender, 19), void,
-	void* rcx, const DrawModelState_t& pState, const ModelRenderInfo_t& pInfo, matrix3x4* pBoneToWorld)
+	IVModelRender* rcx, const DrawModelState_t& pState, const ModelRenderInfo_t& pInfo, matrix3x4* pBoneToWorld)
 {
 	DEBUG_RETURN(IVModelRender_DrawModelExecute, rcx, pState, pInfo, pBoneToWorld);
 
+#ifndef TEXTMODE
 	if (I::EngineVGui->IsGameUIVisible() || SDK::CleanScreenshot()
 		|| F::CameraWindow.m_bDrawing || !F::Materials.m_bLoaded || G::Unload)
 		return CALL_ORIGINAL(rcx, pState, pInfo, pBoneToWorld);
 
 	if (F::Chams.m_bRendering)
-		return F::Chams.RenderHandler(pState, pInfo, pBoneToWorld);
+		return F::Chams.RenderHandler(rcx, pState, pInfo, pBoneToWorld);
 	if (F::Glow.m_bRendering)
-		return F::Glow.RenderHandler(pState, pInfo, pBoneToWorld);
+		return F::Glow.RenderHandler(rcx, pState, pInfo, pBoneToWorld);
 
 	if (F::Chams.m_mEntities.contains(pInfo.entity_index))
 		return;
 
-	auto pEntity = I::ClientEntityList->GetClientEntity(pInfo.entity_index)->As<CBaseEntity>();
+	auto pEntityBase = I::ClientEntityList->GetClientEntity(pInfo.entity_index);
+	auto pEntity = pEntityBase ? pEntityBase->As<CBaseEntity>() : nullptr;
 	if (pEntity && pEntity->IsWearableVM() /*pEntity->IsViewmodel()*/)
 	{
-		F::Glow.RenderViewmodel(pState, pInfo, pBoneToWorld);
-		if (F::Chams.RenderViewmodel(pState, pInfo, pBoneToWorld))
+		F::Glow.RenderViewmodel(rcx, pState, pInfo, pBoneToWorld);
+		if (F::Chams.RenderViewmodel(rcx, pState, pInfo, pBoneToWorld))
 			return;
 	}
 
 	CALL_ORIGINAL(rcx, pState, pInfo, pBoneToWorld);
+#endif
 }
 
+#ifndef TEXTMODE
 MAKE_HOOK(CBaseAnimating_InternalDrawModel, S::CBaseAnimating_InternalDrawModel(), int,
-	void* rcx, int flags)
+	CBaseAnimating* rcx, int flags)
 {
 	DEBUG_RETURN(CBaseAnimating_InternalDrawModel, rcx, flags);
 
@@ -53,6 +57,7 @@ MAKE_HOOK(CBaseAnimating_InternalDrawModel, S::CBaseAnimating_InternalDrawModel(
 
 	return CALL_ORIGINAL(rcx, 1);
 }
+
 
 MAKE_HOOK(CBaseViewModel_DrawModel, S::CBaseViewModel_DrawModel(), int,
 	void* rcx, int flags)
@@ -68,3 +73,4 @@ MAKE_HOOK(CBaseViewModel_DrawModel, S::CBaseViewModel_DrawModel(), int,
 	s_bDrawingViewmodel = false;
 	return iReturn;
 }
+#endif

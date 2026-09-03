@@ -3,12 +3,20 @@
 #include "../PacketManip/AntiAim/AntiAim.h"
 #include "../EnginePrediction/EnginePrediction.h"
 #include "../Aimbot/AutoRocketJump/AutoRocketJump.h"
-#include "../Backtrack/Backtrack.h"
 #include "../AntiCheatCompatibility/AntiCheatCompatibility.h"
+#include "../Backtrack/Backtrack.h"
+#include "../Createmove/Createmove.h"
+#include "../ImGui/IndicatorPanel.h"
+
+MAKE_SIGNATURE(Host_ShouldRun, "engine.dll", "48 83 EC ? 48 8B 05 ? ? ? ? 83 78 ? ? 74 ? 48 8B 05", 0x0);
+MAKE_SIGNATURE(net_time, "engine.dll", "F2 0F 10 05 ? ? ? ? 66 0F 2F 05 ? ? ? ? 72", 0x0);
+MAKE_SIGNATURE(host_frametime_unbounded, "engine.dll", "F3 0F 10 05 ? ? ? ? F3 0F 11 45 ? F3 0F 11 4D ? 89 45", 0x0);
+MAKE_SIGNATURE(host_frametime_stddeviation, "engine.dll", "F3 0F 10 0D ? ? ? ? 48 8D 54 24 ? 0F 57 C0 48 89 44 24 ? 8B 05", 0x0);
+MAKE_SIGNATURE(Con_NXPrintf, "engine.dll", "48 89 54 24 ? 4C 89 44 24 ? 4C 89 4C 24 ? 53 57 B8 ? ? ? ? E8 ? ? ? ? 48 2B E0 48 8B D9", 0x0);
 
 void CTicks::Reset()
 {
-	m_bSpeedhack = m_bDoubletap = m_bRecharge = m_bWarp = false;
+	m_bDoubletap = m_bRecharge = m_bWarp = false;
 	m_iShiftedTicks = m_iShiftedGoal = 0;
 }
 
@@ -33,11 +41,12 @@ void CTicks::Recharge(CTFPlayer* pLocal)
 		m_iDeficit--, m_iShiftedTicks--;
 	}
 
-	if (!Vars::Doubletap::RechargeTicks.Value && !bPassive
-		|| m_bDoubletap || m_bWarp || m_iShiftedTicks == m_iMaxShift || m_bSpeedhack)
+	if (!Vars::Doubletap::RechargeTicks.Value && !bPassive && !m_bRechargeQueue
+		|| m_bDoubletap || m_bWarp || m_iShiftedTicks == m_iMaxShift)
 		return;
 
 	m_bRecharge = true;
+	m_bRechargeQueue = false;
 	m_iShiftedGoal = m_iShiftedTicks + 1;
 }
 
@@ -48,7 +57,7 @@ void CTicks::Warp()
 
 	m_bWarp = false;
 	if (!Vars::Doubletap::Warp.Value
-		|| !m_iShiftedTicks || m_bDoubletap || m_bRecharge || m_bSpeedhack)
+		|| !m_iShiftedTicks || m_bDoubletap || m_bRecharge)
 		return;
 
 	m_bWarp = true;
@@ -61,7 +70,7 @@ void CTicks::Doubletap(CTFPlayer* pLocal, CUserCmd* pCmd)
 		return;
 
 	if (!Vars::Doubletap::Doubletap.Value
-		|| m_iWait || m_bWarp || m_bRecharge || m_bSpeedhack)
+		|| m_iWait || m_bWarp || m_bRecharge)
 		return;
 
 	int iTicks = std::min(m_iShiftedTicks + 1, 22);
@@ -77,15 +86,6 @@ void CTicks::Doubletap(CTFPlayer* pLocal, CUserCmd* pCmd)
 	m_iShiftedGoal = std::max(m_iShiftedTicks - Vars::Doubletap::TickLimit.Value + 1, 0);
 	if (Vars::Doubletap::AntiWarp.Value)
 		m_bAntiWarp = pLocal->m_hGroundEntity();
-}
-
-void CTicks::Speedhack()
-{
-	m_bSpeedhack = Vars::Speedhack::Scale.Value != 1;
-	if (!m_bSpeedhack)
-		return;
-
-	m_bDoubletap = m_bWarp = m_bRecharge = false;
 }
 
 static Vec3 s_vVelocity = {};
@@ -151,6 +151,48 @@ bool CTicks::ValidWeapon(CTFWeaponBase* pWeapon)
 	return true;
 }
 
+void CTicks::SendMoveFunc()
+{
+	CLC_Move moveMsg;
+	byte data[4000];
+	moveMsg.m_DataOut.StartWriting(data, sizeof(data));
+
+	int nCommands = 1 + I::ClientState->chokedcommands;
+	moveMsg.m_nNewCommands = std::clamp(nCommands, 0, MAX_NEW_COMMANDS);
+	int nExtraCommands = nCommands - moveMsg.m_nNewCommands;
+	moveMsg.m_nBackupCommands = std::clamp(nExtraCommands, 2, MAX_BACKUP_COMMANDS);
+
+	int nNumCmds = moveMsg.m_nNewCommands + moveMsg.m_nBackupCommands;
+	{
+		const int iAllowedNewCommands = std::max(m_iMaxUsrCmdProcessTicks - m_iShiftedTicks, 0);
+		const int iCmdCount = nNumCmds - 3;
+		if (iCmdCount > iAllowedNewCommands)
+		{
+			SDK::Output("clc_Move", std::format("{:d} sent <{:d} | {:d}>, max was {:d}.", iCmdCount + 3, moveMsg.m_nNewCommands, moveMsg.m_nBackupCommands, iAllowedNewCommands).c_str(), { 255, 0, 0, 255 });
+			m_iDeficit = iCmdCount - iAllowedNewCommands;
+		}
+	}
+
+	bool bOk = true;
+	{
+		const int nNextCommandNr = I::ClientState->lastoutgoingcommand + nCommands;
+		for (int nFrom = -1, nTo = nNextCommandNr - nNumCmds + 1; nTo <= nNextCommandNr; nTo++)
+		{
+			const bool bIsNewCmd = nTo >= nNextCommandNr - moveMsg.m_nNewCommands + 1;
+			bOk = bOk && I::Client->WriteUsercmdDeltaToBuffer(&moveMsg.m_DataOut, nFrom, nTo, bIsNewCmd);
+			nFrom = nTo;
+		}
+	}
+
+	if (bOk)
+	{
+		if (nExtraCommands)
+			I::ClientState->m_NetChannel->m_nChokedPackets -= nExtraCommands;
+
+		I::ClientState->m_NetChannel->SendNetMsg(moveMsg);
+	}
+}
+
 void CTicks::MoveFunc(float accumulated_extra_samples, bool bFinalTick)
 {
 	m_iShiftedTicks--;
@@ -164,8 +206,92 @@ void CTicks::MoveFunc(float accumulated_extra_samples, bool bFinalTick)
 
 	m_bGoalReached = bFinalTick && m_iShiftedTicks == m_iShiftedGoal;
 
-	static auto CL_Move = U::Hooks.m_mHooks["CL_Move"];
-	CL_Move->Call<void>(accumulated_extra_samples, bFinalTick);
+	if (I::ClientState->m_nSignonState < SIGNONSTATE_CONNECTED || !S::Host_ShouldRun.Call<bool>())
+		return;
+
+	G::SendPacket = true;
+
+	if (I::DemoPlayer->IsPlayingBack())
+	{
+		if (!I::ClientState->ishltv && !I::ClientState->isreplay)
+			return;
+
+		G::SendPacket = false;
+	}
+
+	static auto host_limitlocal = H::ConVars.FindVar("host_limitlocal");
+	double net_time = *reinterpret_cast<double*>(U::Memory.RelToAbs(S::net_time(), 4));
+	if ((!I::ClientState->m_NetChannel->IsLoopback() || host_limitlocal->GetInt()) &&
+		(net_time < I::ClientState->m_flNextCmdTime || !I::ClientState->m_NetChannel->CanPacket() || !bFinalTick))
+		G::SendPacket = false;
+
+	if (I::ClientState->m_nSignonState == SIGNONSTATE_FULL)
+	{
+		int nNextCommandNr = I::ClientState->lastoutgoingcommand + I::ClientState->chokedcommands + 1;
+		F::CreateMove.Run(nNextCommandNr, TICK_INTERVAL - accumulated_extra_samples);
+
+		if (I::DemoRecorder->IsRecording())
+			I::DemoRecorder->RecordUserInput(nNextCommandNr);
+
+		if (!G::SendPacket)
+		{
+			I::ClientState->m_NetChannel->SetChoked();
+			I::ClientState->chokedcommands++;
+		}
+		else
+			SendMoveFunc();
+	}
+
+	if (!G::SendPacket)
+		return;
+
+	if (I::ClientState->m_nSignonState == SIGNONSTATE_FULL)
+	{
+		if (I::ClientState->m_NetChannel->IsTimingOut() && !I::DemoPlayer->IsPlayingBack())
+		{
+			struct con_nprint_s
+			{
+				int		index;			// Row #
+				float	time_to_live;	// # of seconds before it disappears. -1 means to display for 1 frame then go away.
+				float	color[3];		// RGB colors ( 0.0 -> 1.0 scale )
+				bool	fixed_width_font;
+			} np;
+
+			np.time_to_live = 1.f;
+			np.index = 2;
+			np.fixed_width_font = false;
+			np.color[0] = 1.f;
+			np.color[1] = 0.2f;
+			np.color[2] = 0.2f;
+
+			float flTimeOut = I::ClientState->m_NetChannel->GetTimeoutSeconds();
+			float flRemainingTime = flTimeOut - I::ClientState->m_NetChannel->GetTimeSinceLastReceived();
+			S::Con_NXPrintf.Call<void>(&np, "WARNING:  Connection Problem"); np.index = 3;
+			S::Con_NXPrintf.Call<void>(&np, "Auto-disconnect in %.1f seconds", flRemainingTime);
+
+			I::ClientState->ForceFullUpdate();
+		}
+
+		float host_frametime_unbounded = *reinterpret_cast<float*>(U::Memory.RelToAbs(S::host_frametime_unbounded(), 4));
+		float host_frametime_stddeviation = *reinterpret_cast<float*>(U::Memory.RelToAbs(S::host_frametime_stddeviation(), 4));
+
+		NET_Tick tickMsg(I::ClientState->m_nDeltaTick, host_frametime_unbounded, host_frametime_stddeviation);
+		I::ClientState->m_NetChannel->SendNetMsg(tickMsg);
+	}
+
+	I::ClientState->lastoutgoingcommand = I::ClientState->m_NetChannel->SendDatagram(NULL);
+	I::ClientState->chokedcommands = 0;
+
+	static auto cl_cmdrate = H::ConVars.FindVar("cl_cmdrate");
+	if (I::ClientState->m_nSignonState == SIGNONSTATE_FULL)
+	{
+		float flCommandInterval = 1.0f / cl_cmdrate->GetFloat();
+		float flMaxDelta = std::min(TICK_INTERVAL, flCommandInterval);
+		float flDelta = std::clamp((float)(net_time - I::ClientState->m_flNextCmdTime), 0.0f, flMaxDelta);
+		I::ClientState->m_flNextCmdTime = net_time + flCommandInterval - flDelta;
+	}
+	else
+		I::ClientState->m_flNextCmdTime = net_time + 0.2f;
 }
 
 void CTicks::Move(float accumulated_extra_samples, bool bFinalTick)
@@ -175,12 +301,6 @@ void CTicks::Move(float accumulated_extra_samples, bool bFinalTick)
 	while (m_iShiftedTicks > m_iMaxShift)
 		MoveFunc(accumulated_extra_samples, false);
 	m_iShiftedTicks = std::max(m_iShiftedTicks, 0) + 1;
-
-	if (m_bSpeedhack)
-	{
-		m_iShiftedTicks = Vars::Speedhack::Scale.Value;
-		m_iShiftedGoal = 0;
-	}
 
 	m_iShiftedGoal = std::clamp(m_iShiftedGoal, 0, m_iMaxShift);
 	if (m_iShiftedTicks > m_iShiftedGoal) // normal use/doubletap/teleport
@@ -215,7 +335,6 @@ void CTicks::MoveManage()
 
 	Recharge(pLocal);
 	Warp();
-	Speedhack();
 
 	if (!m_bRecharge)
 		m_iWait = std::max(m_iWait, 0);
@@ -246,45 +365,45 @@ void CTicks::MoveManage()
 	m_iMaxShift = std::max(m_iMaxShift, 1);
 }
 
-void CTicks::CreateMove(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd, bool* pSendPacket)
+void CTicks::CreateMove(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd)
 {
 	Doubletap(pLocal, pCmd);
 	AntiWarp(pLocal, pCmd);
-	ManagePacket(pCmd, pSendPacket);
+	ManagePacket(pCmd);
 
 	SaveShootPos(pLocal);
-	SaveShootAngle(pCmd, *pSendPacket);
+	SaveShootAngle(pCmd);
 
 	if (m_bDoubletap && m_iShiftedTicks == m_iShiftStart && pWeapon && pWeapon->IsInReload())
 		m_bTimingUnsure = true;
 }
 
-void CTicks::ManagePacket(CUserCmd* pCmd, bool* pSendPacket)
+void CTicks::ManagePacket(CUserCmd* pCmd)
 {
-	if (!m_bDoubletap && !m_bWarp && !m_bSpeedhack)
+	if (!m_bDoubletap && !m_bWarp)
 	{
 		static bool bWasSet = false;
 		bool bCanChoke = CanChoke(true); // failsafe
 		if (G::PSilentAngles && bCanChoke)
-			*pSendPacket = false, bWasSet = true;
+			G::SendPacket = false, bWasSet = true;
 		else if (bWasSet || !bCanChoke)
-			*pSendPacket = true, bWasSet = false;
+			G::SendPacket = true, bWasSet = false;
 
 		bool bShouldShift = m_iShiftedTicks && m_iShiftedTicks + I::ClientState->chokedcommands >= m_iMaxUsrCmdProcessTicks;
-		if (!*pSendPacket && bShouldShift)
+		if (!G::SendPacket && bShouldShift)
 			m_iShiftedGoal = std::max(m_iShiftedGoal - 1, 0);
 	}
 	else
 	{
-		if ((m_bSpeedhack || m_bWarp) && G::Attacking == 1)
+		if (m_bWarp && G::Attacking == 1)
 		{
-			*pSendPacket = true;
+			G::SendPacket = true;
 			return;
 		}
 
-		*pSendPacket = m_iShiftedGoal == m_iShiftedTicks;
+		G::SendPacket = m_iShiftedGoal == m_iShiftedTicks;
 		if (I::ClientState->chokedcommands >= 21) // prevent overchoking
-			*pSendPacket = true;
+			G::SendPacket = true;
 	}
 }
 
@@ -335,7 +454,7 @@ int CTicks::GetTicks(CTFWeaponBase* pWeapon)
 		return m_iShiftedTicks - m_iShiftedGoal;
 
 	if (!Vars::Doubletap::Doubletap.Value
-		|| m_iWait || m_bWarp || m_bRecharge || m_bSpeedhack || F::AutoRocketJump.IsRunning())
+		|| m_iWait || m_bWarp || m_bRecharge || F::AutoRocketJump.IsRunning())
 		return 0;
 
 	int iTicks = std::min(m_iShiftedTicks + 1, 22);
@@ -385,11 +504,11 @@ Vec3 CTicks::GetShootPos()
 	return m_vShootPos;
 }
 
-void CTicks::SaveShootAngle(CUserCmd* pCmd, bool bSendPacket)
+void CTicks::SaveShootAngle(CUserCmd* pCmd)
 {
 	static auto sv_maxusrcmdprocessticks_holdaim = H::ConVars.FindVar("sv_maxusrcmdprocessticks_holdaim");
 
-	if (bSendPacket)
+	if (G::SendPacket)
 		m_vShootAngle = std::nullopt;
 	else if (!m_vShootAngle && G::Attacking == 1 && sv_maxusrcmdprocessticks_holdaim->GetBool())
 		m_vShootAngle = pCmd->viewangles;
@@ -403,39 +522,72 @@ Vec3* CTicks::GetShootAngle()
 
 bool CTicks::IsTimingUnsure()
 {	// actually knowing when we'll shoot would be better than this, but this is fine for now
-	return m_bTimingUnsure || m_bSpeedhack /*|| m_bWarp*/;
+	return m_bTimingUnsure /*|| m_bWarp*/;
 }
 
 void CTicks::Draw(CTFPlayer* pLocal)
 {
-	if (!(Vars::Menu::Indicators.Value & Vars::Menu::IndicatorsEnum::Ticks) || !pLocal->IsAlive())
+	static float flCurrentProgress = 0.f;
+	static std::string sRightText = {};
+	static Color_t tBarColor = {};
+	static float flCachedProgress = 0.f;
+	static bool bCachedFooter = false;
+	static bool bCachedValid = false;
+
+	if (!(Vars::Menu::Indicators.Value & Vars::Menu::IndicatorsEnum::Ticks))
+	{
+		flCurrentProgress = 0.f;
+		bCachedValid = false;
+		return;
+	}
+
+	if (pLocal)
+	{
+		if (!pLocal->IsAlive())
+		{
+			flCurrentProgress = 0.f;
+			bCachedValid = false;
+			return;
+		}
+
+		const int iAntiAimTicks = std::clamp(F::AntiAim.YawOn() ? F::AntiAim.AntiAimTicks() : 0, 0, std::max(m_iMaxUsrCmdProcessTicks, 0));
+		const int iChokedTicks = std::max(I::ClientState->chokedcommands - iAntiAimTicks, 0);
+		const int iMaxTicks = std::max(m_iMaxUsrCmdProcessTicks - iAntiAimTicks, 0);
+		const int iTicks = std::clamp(m_iShiftedTicks + iChokedTicks, 0, iMaxTicks);
+		const float flTargetProgress = iMaxTicks > 0 ? static_cast<float>(iTicks) / static_cast<float>(iMaxTicks) : 0.f;
+		flCurrentProgress = std::lerp(flCurrentProgress, flTargetProgress, std::clamp(ImGui::GetIO().DeltaTime * 10.f, 0.f, 1.f));
+		sRightText = std::format("{} / {}", iTicks, iMaxTicks);
+		tBarColor = m_iWait ? Color_t(255, 150, 0, 255) : Color_t(0, 255, 100, 255);
+		flCachedProgress = flCurrentProgress;
+		bCachedFooter = m_iWait != 0;
+		bCachedValid = true;
+	}
+
+	if (!bCachedValid)
 		return;
 
 	const DragBox_t dtPos = Vars::Menu::TicksDisplay.Value;
-	const auto& fFont = H::Fonts.GetFont(FONT_INDICATORS);
 
-	if (m_bSpeedhack)
-		return H::Draw.StringOutlined(fFont, dtPos.x, dtPos.y + 2, Vars::Menu::Theme::Active.Value, Vars::Menu::Theme::Background.Value, ALIGN_TOP, std::format("Speedhack x{}", Vars::Speedhack::Scale.Value).c_str());
-	
-	int iAntiAimTicks = F::AntiAim.YawOn() ? F::AntiAim.AntiAimTicks() : 0;
-	int iTicks = std::clamp(m_iShiftedTicks + std::max(I::ClientState->chokedcommands - iAntiAimTicks, 0), 0, m_iMaxUsrCmdProcessTicks);
-	int iMax = std::max(m_iMaxUsrCmdProcessTicks - iAntiAimTicks, 0);
-
-	float flRatio = float(iTicks) / float(iMax);
-	int iSizeX = H::Draw.Scale(100, Scale_Round), iSizeY = H::Draw.Scale(12, Scale_Round);
-	int iPosX = dtPos.x - iSizeX / 2, iPosY = dtPos.y + fFont.m_nTall + H::Draw.Scale(4) + 1;
-
-	H::Draw.StringOutlined(fFont, dtPos.x, dtPos.y + 2, Vars::Menu::Theme::Active.Value, Vars::Menu::Theme::Background.Value, ALIGN_TOP, std::format("Ticks {} / {}", iTicks, iMax).c_str());
-	if (m_iWait)
-		H::Draw.StringOutlined(fFont, dtPos.x, dtPos.y + fFont.m_nTall + H::Draw.Scale(18, Scale_Round) + 1, Vars::Menu::Theme::Active.Value, Vars::Menu::Theme::Background.Value, ALIGN_TOP, "Not Ready");
-
-	H::Draw.LineRoundRect(iPosX, iPosY, iSizeX, iSizeY, H::Draw.Scale(4, Scale_Round), Vars::Menu::Theme::Accent.Value, 16);
-	if (flRatio)
+	ImDrawList* pDrawList = ImGui::GetBackgroundDrawList();
+	const float flPanelWidth = H::Draw.Scale(180.f);
+	const float flPanelHeight = H::Draw.Scale(29.f);
+	const ImVec2 vPanelPos =
 	{
-		iSizeX -= H::Draw.Scale(2, Scale_Ceil) * 2, iSizeY -= H::Draw.Scale(2, Scale_Ceil) * 2;
-		iPosX += H::Draw.Scale(2, Scale_Round), iPosY += H::Draw.Scale(2, Scale_Round);
-		H::Draw.StartClipping(iPosX, iPosY, iSizeX * flRatio, iSizeY);
-		H::Draw.FillRoundRect(iPosX, iPosY, iSizeX, iSizeY, H::Draw.Scale(3, Scale_Round), Vars::Menu::Theme::Accent.Value, 16);
-		H::Draw.EndClipping();
-	}
+		static_cast<float>(dtPos.x) - flPanelWidth / 2.f,
+		static_cast<float>(dtPos.y)
+	};
+
+	DrawIndicatorPanel(
+		pDrawList,
+		vPanelPos,
+		flPanelWidth,
+		flPanelHeight,
+		"Ticks",
+		sRightText.c_str(),
+		Vars::Menu::Theme::Active.Value,
+		Vars::Menu::Theme::Active.Value,
+		tBarColor,
+		flCachedProgress,
+		bCachedFooter,
+		"Not Ready");
 }

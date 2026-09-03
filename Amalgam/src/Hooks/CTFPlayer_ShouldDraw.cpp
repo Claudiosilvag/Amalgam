@@ -15,6 +15,9 @@ MAKE_HOOK(CTFPlayer_ShouldDraw, S::CTFPlayer_ShouldDraw(), bool,
 {
 	DEBUG_RETURN(CTFPlayer_ShouldDraw, rcx);
 
+#ifdef TEXTMODE
+	return false;
+#else
 	if (F::Spectate.HasTarget() && !I::EngineClient->IsHLTV())
 	{
 		auto pLocal = H::Entities.GetLocal();
@@ -26,6 +29,7 @@ MAKE_HOOK(CTFPlayer_ShouldDraw, S::CTFPlayer_ShouldDraw(), bool,
 	}
 
 	return CALL_ORIGINAL(rcx);
+#endif
 }
 
 MAKE_HOOK(CBasePlayer_ShouldDrawThisPlayer, S::CBasePlayer_ShouldDrawThisPlayer(), bool,
@@ -33,6 +37,9 @@ MAKE_HOOK(CBasePlayer_ShouldDrawThisPlayer, S::CBasePlayer_ShouldDrawThisPlayer(
 {
 	DEBUG_RETURN(CBasePlayer_ShouldDrawThisPlayer, rcx);
 
+#ifdef TEXTMODE
+	return false;
+#else
 	const auto dwRetAddr = uintptr_t(_ReturnAddress());
 	//const auto dwDesired = S::CTFWeaponBase_PostDataUpdate_ShouldDrawThisPlayer_Call();
 	const auto dwUndesired = S::CBasePlayer_BuildFirstPersonMeathookTransformations_ShouldDrawThisPlayer_Call();
@@ -54,6 +61,7 @@ MAKE_HOOK(CBasePlayer_ShouldDrawThisPlayer, S::CBasePlayer_ShouldDrawThisPlayer(
 	}
 
 	return CALL_ORIGINAL(rcx);
+#endif
 }
 
 MAKE_HOOK(CBasePlayer_ShouldDrawLocalPlayer, S::CBasePlayer_ShouldDrawLocalPlayer(), bool,
@@ -61,6 +69,9 @@ MAKE_HOOK(CBasePlayer_ShouldDrawLocalPlayer, S::CBasePlayer_ShouldDrawLocalPlaye
 {
 	DEBUG_RETURN(CBasePlayer_ShouldDrawThisPlayer, /*rcx*/);
 
+#ifdef TEXTMODE
+	return false;
+#else
 	//const auto dwRetAddr = uintptr_t(_ReturnAddress());
 	//const auto dwDesired = S::CBaseCombatWeapon_CalcOverrideModelIndex_ShouldDrawLocalPlayer_Call();
 
@@ -75,6 +86,7 @@ MAKE_HOOK(CBasePlayer_ShouldDrawLocalPlayer, S::CBasePlayer_ShouldDrawLocalPlaye
 	}
 
 	return CALL_ORIGINAL(/*rcx*/);
+#endif
 }
 
 MAKE_HOOK(CBaseCombatWeapon_ShouldDraw, S::CBaseCombatWeapon_ShouldDraw(), bool,
@@ -82,6 +94,9 @@ MAKE_HOOK(CBaseCombatWeapon_ShouldDraw, S::CBaseCombatWeapon_ShouldDraw(), bool,
 {
 	DEBUG_RETURN(CBaseCombatWeapon_ShouldDraw, rcx);
 
+#ifdef TEXTMODE
+	return false;
+#else
 	if (F::Spectate.HasTarget() && !I::EngineClient->IsHLTV())
 	{
 		auto pWeapon = H::Entities.GetWeapon();
@@ -90,4 +105,5 @@ MAKE_HOOK(CBaseCombatWeapon_ShouldDraw, S::CBaseCombatWeapon_ShouldDraw(), bool,
 	}
 
 	return CALL_ORIGINAL(rcx);
+#endif
 }

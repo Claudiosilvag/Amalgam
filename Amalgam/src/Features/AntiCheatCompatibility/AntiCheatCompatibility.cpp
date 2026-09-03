@@ -3,14 +3,36 @@
 #include "../Backtrack/Backtrack.h"
 #include "../Misc/Misc.h"
 
-void CAntiCheatCompatibility::CreateMove(CUserCmd* pCmd, bool* pSendPacket)
+void CAntiCheatCompatibility::EnforceSettings()
 {
+	if (!Active())
+		return;
+
+	if (Vars::Aimbot::General::AimType.Value == Vars::Aimbot::General::AimTypeEnum::Silent)
+		Vars::Aimbot::General::AimType.Value = Vars::Aimbot::General::AimTypeEnum::Plain;
+	Vars::Aimbot::General::NoSpread.Value = false;
+	Vars::CritHack::ForceCrits.Value = false;
+	Vars::CritHack::AvoidRandomCrits.Value = false;
+	Vars::Misc::Movement::FastAccelerate.Value = false;
+	Vars::Misc::Movement::DuckSpeed.Value = false;
+	Vars::Doubletap::Doubletap.Value = false;
+	Vars::Doubletap::Warp.Value = false;
+	Vars::Fakelag::Fakelag.Value = Vars::Fakelag::FakelagEnum::Off;
+	const auto pLocal = H::Entities.GetLocal();
+	if (!Vars::AntiAim::TauntSpin.Value || !pLocal || !pLocal->IsTaunting())
+		Vars::AntiAim::Enabled.Value = false;
+}
+
+void CAntiCheatCompatibility::CreateMove(CUserCmd* pCmd)
+{
+	EnforceSettings();
+
 	if (!Active())
 		return;
 
 	Math::ClampAngles(pCmd->viewangles); // shouldn't happen, but failsafe
 
-	m_vHistory.emplace_front(pCmd->viewangles, pCmd->buttons & IN_ATTACK, pCmd->buttons & IN_ATTACK2, *pSendPacket);
+	m_vHistory.emplace_front(pCmd->viewangles, pCmd->buttons & IN_ATTACK, pCmd->buttons & IN_ATTACK2, G::SendPacket);
 	if (m_vHistory.size() > 5)
 		m_vHistory.pop_back();
 	if (m_vHistory.size() < 3)
@@ -33,7 +55,7 @@ void CAntiCheatCompatibility::CreateMove(CUserCmd* pCmd, bool* pSendPacket)
 			if (Math::CalcFov(pCmd->viewangles, m_vHistory[2].m_vAngle) < REAL_EPSILON)
 				pCmd->viewangles = m_vHistory[0].m_vAngle + Vec3(0.f, REAL_EPSILON * 2);
 			m_vHistory[0].m_vAngle = pCmd->viewangles;
-			m_vHistory[0].m_bSendingPacket = *pSendPacket = m_vHistory[1].m_bSendingPacket;
+			m_vHistory[0].m_bSendingPacket = G::SendPacket = m_vHistory[1].m_bSendingPacket;
 		}
 
 		// prevent aim snap checks
@@ -51,7 +73,7 @@ void CAntiCheatCompatibility::CreateMove(CUserCmd* pCmd, bool* pSendPacket)
 			{
 				pCmd->viewangles.y += SNAP_NOISE_EPSILON * 2;
 				m_vHistory[0].m_vAngle = pCmd->viewangles;
-				m_vHistory[0].m_bSendingPacket = *pSendPacket = m_vHistory[1].m_bSendingPacket;
+				m_vHistory[0].m_bSendingPacket = G::SendPacket = m_vHistory[1].m_bSendingPacket;
 			}
 		}
 	}
@@ -87,12 +109,14 @@ void CAntiCheatCompatibility::RespondCvarValue(INetMessage& msg)
 		else
 			m_sValue = pConVar->GetString();
 		break;
+	/*
 	case FNV1A::Hash32Const("cl_updaterate"):
 		if (F::Misc.m_iWishUpdaterate != -1)
 			m_sValue = std::to_string(F::Misc.m_iWishUpdaterate);
 		else
 			m_sValue = pConVar->GetString();
 		break;
+	*/
 	case FNV1A::Hash32Const("mat_dxlevel"):
 		m_sValue = pConVar->GetString();
 		break;

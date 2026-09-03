@@ -21,6 +21,7 @@ struct Frame_t
 	std::string m_sFile = "";
 	unsigned int m_uLine = 0;
 	std::string m_sName = "";
+	std::string m_sPattern = "";
 };
 
 static PVOID s_pHandle;
@@ -88,6 +89,11 @@ static inline std::deque<Frame_t> StackTrace(PCONTEXT pContext)
 			if (SymGetSymFromAddr64(hProcess, tStackFrame.AddrPC.Offset, &dwOffset, symbol))
 				tFrame.m_sName = symbol->Name;
 		}
+		
+		{
+			auto sPattern = U::Memory.GenerateSignatureAtAddress(tStackFrame.AddrPC.Offset);
+			tFrame.m_sPattern = sPattern.empty() ? "No signature" : sPattern;
+		}
 	}
 
 	SymCleanup(hProcess);
@@ -148,6 +154,8 @@ static LONG APIENTRY ExceptionFilter(PEXCEPTION_POINTERS ExceptionInfo)
 				ssErrorStream << std::format(" ({} L{})", tFrame.m_sFile, tFrame.m_uLine);
 			if (!tFrame.m_sName.empty())
 				ssErrorStream << std::format(" ({})", tFrame.m_sName);
+			if (!tFrame.m_sPattern.empty())
+				ssErrorStream << std::format("\n({})", tFrame.m_sPattern);
 			ssErrorStream << "\n";
 		}
 	}
@@ -166,10 +174,11 @@ static LONG APIENTRY ExceptionFilter(PEXCEPTION_POINTERS ExceptionInfo)
 
 		ssErrorStream << "\n";
 		ssErrorStream << "Ctrl + C to copy. \n";
-		ssErrorStream << "Logged to Amalgam\\crash_log.txt. ";
+		ssErrorStream << "Logged to unibox\\crash_log.txt. ";
 	}
 	catch (...) {}
-
+	
+#ifndef TEXTMODE
 	switch (ExceptionInfo->ExceptionRecord->ExceptionCode)
 	{
 	case STATUS_ACCESS_VIOLATION:
@@ -177,6 +186,7 @@ static LONG APIENTRY ExceptionFilter(PEXCEPTION_POINTERS ExceptionInfo)
 	case STATUS_HEAP_CORRUPTION:
 		SDK::Output("Unhandled exception", ssErrorStream.str().c_str(), {}, OUTPUT_DEBUG, nullptr, MB_OK | MB_ICONERROR);
 	}
+#endif
 
 	return EXCEPTION_CONTINUE_SEARCH;
 }

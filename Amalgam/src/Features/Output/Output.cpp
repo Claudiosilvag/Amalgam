@@ -4,7 +4,7 @@
 #include "../Players/PlayerUtils.h"
 
 static std::string s_sRed =		Color_t(255, 100, 100).ToHex();
-static std::string s_sGreen =		Color_t(100, 255, 100).ToHex();
+static std::string s_sGreen =	Color_t(100, 255, 100).ToHex();
 static std::string s_sYellow =	Color_t(200, 169, 0).ToHex();
 
 static inline void OutputInfo(int iFlags, const char* sName,
@@ -179,7 +179,7 @@ void COutput::UserMessage(bf_read& msgData)
 	char sParam[256]; msgData.ReadString(sParam, sizeof(sParam));
 	/*bool bYesNo =*/ msgData.ReadOneBit();
 	int iTarget = msgData.ReadByte();
-	msgData.Seek(0);
+	msgData.Reset();
 	if (!iCaller || !iTarget)
 		return;
 
@@ -341,6 +341,7 @@ void COutput::AliasOnJoin(const char* sName, uint32_t uAccountID)
 		ICON_MD_INFO, INFO_COLOR
 	);
 }
+
 void COutput::AliasChanged(const char* sName, const char* sAction, const char* sAlias)
 {
 	if (!(Vars::Logging::Logs.Value & Vars::Logging::LogsEnum::Aliases))

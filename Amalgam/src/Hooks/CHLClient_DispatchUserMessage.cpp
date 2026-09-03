@@ -5,6 +5,8 @@
 #include "../Features/NoSpread/NoSpreadHitscan/NoSpreadHitscan.h"
 #include "../Features/Misc/AutoVote/AutoVote.h"
 #include "../Features/Aimbot/AutoHeal/AutoHeal.h"
+#include "../Features/Commands/Commands.h"
+#include "../Features/Players/PlayerUtils.h"
 
 //#define DEBUG_VISUALS
 #ifdef DEBUG_VISUALS
@@ -19,15 +21,48 @@ MAKE_HOOK(CHLClient_DispatchUserMessage, U::Memory.GetVirtual(I::Client, 36), bo
 
 	auto bufData = reinterpret_cast<const char*>(msgData.m_pData);
 	msgData.SetAssertOnOverflow(false);
-	msgData.Seek(0);
+	msgData.Reset();
 
 	switch (type)
 	{
-	case VoteStart:
-		F::Output.UserMessage(msgData);
-		F::AutoVote.UserMessage(msgData);
-
+	case VotePass:
+	case VoteFailed:
+	{
+		msgData.SeekRelative(4);
+		const int iVoteID = msgData.ReadLong();
+		F::AutoVote.OnVoteEnd(iVoteID);
 		break;
+	}
+	case CallVoteFailed:
+	{
+		if (Vars::Misc::Automation::AutoVote.Value & Vars::Misc::Automation::AutoVoteEnum::Kick)
+		{
+			int nReason = msgData.ReadByte();
+			if (nReason == VOTE_FAILED_ON_COOLDOWN ||
+				nReason == VOTE_FAILED_RATE_EXCEEDED)
+				F::AutoVote.OnCallVoteFail(msgData.ReadShort());
+			msgData.Reset();
+		}
+		break;
+	}
+	case VoteStart:
+	{
+		int iTeam = msgData.ReadByte();
+		int iVoteID = msgData.ReadLong();
+		int iCaller = msgData.ReadByte();
+		char sReason[256]; msgData.ReadString(sReason, sizeof(sReason));
+		char sTarget[256]; msgData.ReadString(sTarget, sizeof(sTarget));
+		int iTarget = msgData.ReadByte() >> 1;
+		msgData.Reset();
+
+		F::Output.UserMessage(msgData);
+		if (std::string(sReason).find("kick") != std::string::npos)
+		{
+			F::AutoVote.OnVoteStart(iTeam, iVoteID, iCaller, iTarget);
+			F::Misc.OnVoteStart(iCaller, iTarget, sTarget);
+		}
+		break;
+	}
 	case VoiceSubtitle:
 	{
 		int iEntityID = msgData.ReadByte();
@@ -38,10 +73,22 @@ MAKE_HOOK(CHLClient_DispatchUserMessage, U::Memory.GetVirtual(I::Client, 36), bo
 
 		break;
 	}
+	case SayText2:
+	{
+		int iEntityID = msgData.ReadByte();
+		msgData.ReadByte();
+		char sMsgName[256]; msgData.ReadString(sMsgName, sizeof(sMsgName));
+		char sName[256]; msgData.ReadString(sName, sizeof(sName));
+		char sMsg[256]; msgData.ReadString(sMsg, sizeof(sMsg));
+
+		F::Commands.RunChat(sMsg, F::PlayerUtils.GetAccountID(iEntityID), false);
+		F::Misc.OnChatMessage(iEntityID, sName, sMsg);
+		break;
+	}
 	case TextMsg:
 	{
 		char rawMsg[256]; msgData.ReadString(rawMsg, sizeof(rawMsg), true);
-		msgData.Seek(0);
+		msgData.Reset();
 		std::string sMsg = rawMsg;
 		if (!sMsg.empty())
 		{
@@ -97,8 +144,20 @@ MAKE_HOOK(CHLClient_DispatchUserMessage, U::Memory.GetVirtual(I::Client, 36), bo
 			}
 #endif
 
-			if (Vars::Misc::Automation::AntiAutobalance.Value && FNV1A::Hash32(sMsg.c_str()) == FNV1A::Hash32Const("#TF_Autobalance_TeamChangePending"))
-				I::EngineClient->ClientCmd_Unrestricted("retry");
+			if (FNV1A::Hash32(sMsg.c_str()) == FNV1A::Hash32Const("#TF_Autobalance_TeamChangePending"))
+			{
+				if (Vars::Misc::Automation::AntiAutobalance.Value)
+				{
+					F::Misc.SetAutoBalanceTeamChangePending(true);
+					I::EngineClient->ClientCmd_Unrestricted("retry");
+				}
+			}
+			else if (FNV1A::Hash32(sMsg.c_str()) == FNV1A::Hash32Const("#GameUI_vote_failed_vote_in_progress"))
+				F::AutoVote.m_bActiveVote = true;
+			else if (sMsg.find("change class") != std::string::npos && sMsg.find("wave") != std::string::npos)
+				F::Misc.OnBuyBotClassChangeBlocked();
+			else if (sMsg.find("Change_Class") != std::string::npos && sMsg.find("Wave") != std::string::npos)
+				F::Misc.OnBuyBotClassChangeBlocked();
 		}
 		break;
 	}
@@ -123,6 +182,6 @@ MAKE_HOOK(CHLClient_DispatchUserMessage, U::Memory.GetVirtual(I::Client, 36), bo
 		return Vars::Visuals::Removals::ScreenEffects.Value ? true : CALL_ORIGINAL(rcx, type, msgData);
 	}
 
-	msgData.Seek(0);
+	msgData.Reset();
 	return CALL_ORIGINAL(rcx, type, msgData);
 }

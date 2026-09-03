@@ -1,6 +1,7 @@
 #include "Configs.h"
 
 #include "../Binds/Binds.h"
+#include "../Players/PlayerUtils.h"
 #include "../Visuals/Groups/Groups.h"
 #include "../Visuals/Materials/Materials.h"
 
@@ -38,16 +39,32 @@ template <> void CConfigs::SaveJson(boost::property_tree::ptree& t, const std::s
 	t.put_child(s, tChild);
 }
 
-template <> void CConfigs::SaveJson(boost::property_tree::ptree& t, const std::string& s, const std::vector<std::pair<std::string, Color_t>>& v)
+template <> void CConfigs::SaveJson(boost::property_tree::ptree& t, const std::string& s, const std::vector<std::pair<std::string, ChamsMaterial_t>>& v)
 {
 	boost::property_tree::ptree tChild;
-	for (auto& [m, c] : v)
+	for (auto& [sName, tMaterial] : v)
 	{
 		boost::property_tree::ptree tLayer;
-		SaveJson(tLayer, "Material", m);
-		SaveJson(tLayer, "Color", c);
+		SaveJson(tLayer, "Material", sName);
+		SaveJson(tLayer, "Color", tMaterial.tColor);
+		SaveJson(tLayer, "Start", tMaterial.flStart);
+		SaveJson(tLayer, "End", tMaterial.flEnd);
+		SaveJson(tLayer, "SmoothAlpha", tMaterial.bSmoothAlpha);
 
 		tChild.push_back({ "", tLayer });
+	}
+
+	t.put_child(s, tChild);
+}
+
+template <> void CConfigs::SaveJson(boost::property_tree::ptree& t, const std::string& s, const std::vector<int>& v)
+{
+	boost::property_tree::ptree tChild;
+	for (int iValue : v)
+	{
+		boost::property_tree::ptree tValue;
+		tValue.put("", iValue);
+		tChild.push_back({ "", tValue });
 	}
 
 	t.put_child(s, tChild);
@@ -96,6 +113,21 @@ template <> void CConfigs::SaveJson(boost::property_tree::ptree& t, const std::s
 	boost::property_tree::ptree tChild;
 	SaveJson(tChild, "Stencil", v.Stencil);
 	SaveJson(tChild, "Blur", v.Blur);
+	SaveJson(tChild, "Start", v.Start);
+	SaveJson(tChild, "End", v.End);
+	SaveJson(tChild, "SmoothAlpha", v.SmoothAlpha);
+
+	t.put_child(s, tChild);
+}
+
+template <> void CConfigs::SaveJson(boost::property_tree::ptree& t, const std::string& s, const ESP_t& v)
+{
+	boost::property_tree::ptree tChild;
+	SaveJson(tChild, "Draw", v.Draw);
+	SaveJson(tChild, "BackgroundOpacity", v.BackgroundOpacity);
+	SaveJson(tChild, "Start", v.Start);
+	SaveJson(tChild, "End", v.End);
+	SaveJson(tChild, "SmoothAlpha", v.SmoothAlpha);
 
 	t.put_child(s, tChild);
 }
@@ -137,7 +169,7 @@ template <> void CConfigs::LoadJson(const boost::property_tree::ptree& t, const 
 	}
 }
 
-template <> void CConfigs::LoadJson(const boost::property_tree::ptree& t, const std::string& s, std::vector<std::pair<std::string, Color_t>>& v)
+template <> void CConfigs::LoadJson(const boost::property_tree::ptree& t, const std::string& s, std::vector<std::pair<std::string, ChamsMaterial_t>>& v)
 {
 	if (auto tChild = t.get_child_optional(s))
 	{
@@ -148,7 +180,10 @@ template <> void CConfigs::LoadJson(const boost::property_tree::ptree& t, const 
 			{
 				std::string& m = *o;
 				Color_t c; LoadJson(tLayer, "Color", c);
-				v.emplace_back(m, c);
+				float flStart = 0.f; LoadJson(tLayer, "Start", flStart);
+				float flEnd = 8192.f; LoadJson(tLayer, "End", flEnd);
+				bool bSmoothAlpha = false; LoadJson(tLayer, "SmoothAlpha", bSmoothAlpha);
+				v.emplace_back(m, ChamsMaterial_t{ c, flStart, flEnd, bSmoothAlpha});
 			}
 		}
 	}
@@ -157,7 +192,8 @@ template <> void CConfigs::LoadJson(const boost::property_tree::ptree& t, const 
 	for (auto it = v.begin(); it != v.end();)
 	{
 		auto uHash = FNV1A::Hash32(it->first.c_str());
-		bool bValid = uHash != FNV1A::Hash32Const("None") && (uHash == FNV1A::Hash32Const("Original") || F::Materials.m_mMaterials.contains(uHash));
+		bool bValid = uHash != FNV1A::Hash32Const("None")
+			&& (!F::Materials.m_bLoaded || uHash == FNV1A::Hash32Const("Original") || F::Materials.m_mMaterials.contains(uHash));
 		if (bValid)
 		{
 			int i = 0; for (auto& s : v | std::views::keys)
@@ -173,6 +209,16 @@ template <> void CConfigs::LoadJson(const boost::property_tree::ptree& t, const 
 			++it;
 		else
 			it = v.erase(it);
+	}
+}
+
+template <> void CConfigs::LoadJson(const boost::property_tree::ptree& t, const std::string& s, std::vector<int>& v)
+{
+	if (auto tChild = t.get_child_optional(s))
+	{
+		v.clear();
+		for (auto& tValue : *tChild | std::views::values)
+			v.push_back(tValue.get_value<int>());
 	}
 }
 
@@ -220,6 +266,21 @@ template <> void CConfigs::LoadJson(const boost::property_tree::ptree& t, const 
 	{
 		LoadJson(*tChild, "Stencil", v.Stencil);
 		LoadJson(*tChild, "Blur", v.Blur);
+		LoadJson(*tChild, "Start", v.Start);
+		LoadJson(*tChild, "End", v.End);
+		LoadJson(*tChild, "SmoothAlpha", v.SmoothAlpha);
+	}
+}
+
+template <> void CConfigs::LoadJson(const boost::property_tree::ptree& t, const std::string& s, ESP_t& v)
+{
+	if (auto tChild = t.get_child_optional(s))
+	{
+		LoadJson(*tChild, "Draw", v.Draw);
+		LoadJson(*tChild, "BackgroundOpacity", v.BackgroundOpacity);
+		LoadJson(*tChild, "Start", v.Start);
+		LoadJson(*tChild, "End", v.End);
+		LoadJson(*tChild, "SmoothAlpha", v.SmoothAlpha);
 	}
 }
 
@@ -340,10 +401,11 @@ template <> void CConfigs::LoadJson(const boost::property_tree::ptree& t, const 
 
 CConfigs::CConfigs()
 {
-	m_sConfigPath = std::filesystem::current_path().string() + "\\Amalgam\\";
+	m_sConfigPath = std::filesystem::current_path().string() + "\\unibox\\";
 	m_sVisualsPath = m_sConfigPath + "Visuals\\";
 	m_sCorePath = m_sConfigPath + "Core\\";
 	m_sMaterialsPath = m_sConfigPath + "Materials\\";
+	m_sStatePath = m_sConfigPath + "active.cfg";
 
 	if (!std::filesystem::exists(m_sConfigPath))
 		std::filesystem::create_directory(m_sConfigPath);
@@ -356,6 +418,35 @@ CConfigs::CConfigs()
 
 	if (!std::filesystem::exists(m_sMaterialsPath))
 		std::filesystem::create_directory(m_sMaterialsPath);
+
+	LoadState();
+}
+
+void CConfigs::LoadState()
+{
+	try
+	{
+		if (!std::filesystem::exists(m_sStatePath))
+			return;
+
+		boost::property_tree::ptree tRead;
+		read_json(m_sStatePath, tRead);
+		m_sCurrentConfig = tRead.get("Config", m_sCurrentConfig);
+		m_sCurrentVisuals = tRead.get("Visuals", m_sCurrentVisuals);
+	}
+	catch (...) {}
+}
+
+void CConfigs::SaveState() const
+{
+	try
+	{
+		boost::property_tree::ptree tWrite;
+		tWrite.put("Config", m_sCurrentConfig);
+		tWrite.put("Visuals", m_sCurrentVisuals);
+		write_json(m_sStatePath, tWrite);
+	}
+	catch (...) {}
 }
 
 #define IsType(t) pBase->m_iType == typeid(t).hash_code()
@@ -383,7 +474,7 @@ static inline void LoadMain(BaseVar*& pBase, boost::property_tree::ptree& tTree)
 		for (auto& sKey : *tMap | std::views::keys)
 		{
 			int iBind = std::stoi(sKey);
-			if (iBind == DEFAULT_BIND || F::Binds.m_vBinds.size() > iBind && !(pVar->m_iFlags & NOBIND))
+			if (iBind == DEFAULT_BIND || iBind >= 0 && F::Binds.m_vBinds.size() > iBind && !(pVar->m_iFlags & NOBIND))
 			{
 				F::Configs.LoadJson(*tMap, sKey, pVar, iBind);
 				if (iBind != DEFAULT_BIND)
@@ -392,7 +483,7 @@ static inline void LoadMain(BaseVar*& pBase, boost::property_tree::ptree& tTree)
 		}
 	}
 	else if (!(pVar->m_iFlags & NOSAVE))
-		SDK::Output("Amalgam", std::format("{} not found", pVar->Name()).c_str(), ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
+		SDK::Output("unibox", std::format("{} not found", pVar->Name()).c_str(), ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
 }
 #define Load(t, j) if (IsType(t)) LoadMain<t>(pBase, j);
 
@@ -400,8 +491,8 @@ bool CConfigs::SaveConfig(const std::string& sConfigName, bool bNotify)
 {
 	try
 	{
+		std::scoped_lock lock(F::Binds.m_mMutex);
 		boost::property_tree::ptree tWrite;
-
 		{
 			boost::property_tree::ptree tSub;
 			for (int iID = 0; iID < F::Binds.m_vBinds.size(); iID++)
@@ -426,10 +517,10 @@ bool CConfigs::SaveConfig(const std::string& sConfigName, bool bNotify)
 
 		{
 			boost::property_tree::ptree tSub;
-			bool bNoSave = GetAsyncKeyState(VK_SHIFT) & 0x8000;
+			bool bNoSave = !Vars::Config::LoadDebugSettings.Value && !(GetAsyncKeyState(VK_SHIFT) & 0x8000);
 			for (auto& pBase : G::Vars)
 			{
-				if (!bNoSave && pBase->m_iFlags & NOSAVE)
+				if (bNoSave && pBase->m_iFlags & NOSAVE)
 					continue;
 
 				Save(bool, tSub)
@@ -438,7 +529,7 @@ bool CConfigs::SaveConfig(const std::string& sConfigName, bool bNotify)
 				else Save(IntRange_t, tSub)
 				else Save(FloatRange_t, tSub)
 				else Save(std::string, tSub)
-				else Save(VA_LIST(std::vector<std::pair<std::string, Color_t>>), tSub)
+				else Save(VA_LIST(std::vector<std::pair<std::string, ChamsMaterial_t>>), tSub)
 				else Save(Color_t, tSub)
 				else Save(Gradient_t, tSub)
 				else Save(DragBox_t, tSub)
@@ -459,10 +550,11 @@ bool CConfigs::SaveConfig(const std::string& sConfigName, bool bNotify)
 				SaveJson(tChild, "TagsOverrideColor", tGroup.m_bTagsOverrideColor);
 				SaveJson(tChild, "Targets", tGroup.m_iTargets);
 				SaveJson(tChild, "Conditions", tGroup.m_iConditions);
+				SaveJson(tChild, "Roles", tGroup.m_vRoles);
 				SaveJson(tChild, "Players", tGroup.m_iPlayers);
 				SaveJson(tChild, "Buildings", tGroup.m_iBuildings);
 				SaveJson(tChild, "Projectiles", tGroup.m_iProjectiles);
-				SaveJson(tChild, "ESP", tGroup.m_iESP);
+				SaveJson(tChild, "ESP", tGroup.m_tESP);
 				SaveJson(tChild, "Chams", tGroup.m_tChams);
 				SaveJson(tChild, "Glow", tGroup.m_tGlow);
 				SaveJson(tChild, "OffscreenArrows", tGroup.m_bOffscreenArrows);
@@ -485,12 +577,13 @@ bool CConfigs::SaveConfig(const std::string& sConfigName, bool bNotify)
 		write_json(m_sConfigPath + sConfigName + m_sConfigExtension, tWrite);
 
 		m_sCurrentConfig = sConfigName; m_sCurrentVisuals = "";
+		SaveState();
 		if (bNotify)
-			SDK::Output("Amalgam", std::format("Config {} saved", sConfigName).c_str(), INFO_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_INFO);
+			SDK::Output("unibox", std::format("Config {} saved", sConfigName).c_str(), INFO_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_INFO);
 	}
 	catch (...)
 	{
-		SDK::Output("Amalgam", "Save config failed", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
+		SDK::Output("unibox", "Save config failed", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
 		return false;
 	}
 
@@ -501,6 +594,7 @@ bool CConfigs::LoadConfig(const std::string& sConfigName, bool bNotify)
 {
 	try
 	{
+		std::scoped_lock lock(F::Binds.m_mMutex);
 		if (!std::filesystem::exists(m_sConfigPath + sConfigName + m_sConfigExtension))
 		{
 			if (sConfigName == std::string("default"))
@@ -531,39 +625,62 @@ bool CConfigs::LoadConfig(const std::string& sConfigName, bool bNotify)
 				LoadJson(tChild, "Not", tBind.m_bNot);
 				LoadJson(tChild, "Active", tBind.m_bActive);
 				LoadJson(tChild, "Parent", tBind.m_iParent);
-				if (F::Binds.m_vBinds.size() == tBind.m_iParent)
-					tBind.m_iParent = DEFAULT_BIND - 1; // prevent infinite loop
+				if (tBind.m_iParent < DEFAULT_BIND)
+					tBind.m_iParent = DEFAULT_BIND;
 
 				F::Binds.m_vBinds.push_back(tBind);
 			}
 		}
 		else
-			SDK::Output("Amalgam", "Config binds not found", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
+			SDK::Output("unibox", "Config binds not found", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
 
+		// Reject self-references and cycles from hand-edited/old configs before
+		// bind evaluation can recurse through the graph.
+		for (auto& tBind : F::Binds.m_vBinds)
+		{
+			if (tBind.m_iParent >= F::Binds.m_vBinds.size())
+				tBind.m_iParent = DEFAULT_BIND;
+		}
+		for (int i = 0; i < F::Binds.m_vBinds.size(); i++)
+		{
+			std::vector<bool> vSeen(F::Binds.m_vBinds.size());
+			for (int iBind = i; iBind != DEFAULT_BIND; iBind = F::Binds.m_vBinds[iBind].m_iParent)
+			{
+				if (iBind < 0 || iBind >= F::Binds.m_vBinds.size() || vSeen[iBind])
+				{
+					F::Binds.m_vBinds[i].m_iParent = DEFAULT_BIND;
+					break;
+				}
+				vSeen[iBind] = true;
+			}
+		}
 		if (auto tSub = tRead.get_child_optional("Vars");
 			tSub || (tSub = tRead.get_child_optional("ConVars")))
 		{
-			bool bNoSave = GetAsyncKeyState(VK_SHIFT) & 0x8000;
+			bool bNoSave = !(GetAsyncKeyState(VK_SHIFT) & 0x8000);
 			for (auto& pBase : G::Vars)
 			{
-				if (!bNoSave && pBase->m_iFlags & NOSAVE)
+				if (bNoSave && pBase->m_iFlags & NOSAVE)
 					continue;
-
+				
 				Load(bool, *tSub)
 				else Load(int, *tSub)
 				else Load(float, *tSub)
 				else Load(IntRange_t, *tSub)
 				else Load(FloatRange_t, *tSub)
 				else Load(std::string, *tSub)
-				else Load(VA_LIST(std::vector<std::pair<std::string, Color_t>>), *tSub)
+				else Load(VA_LIST(std::vector<std::pair<std::string, ChamsMaterial_t>>), *tSub)
 				else Load(Color_t, *tSub)
 				else Load(Gradient_t, *tSub)
 				else Load(DragBox_t, *tSub)
 				else Load(WindowBox_t, *tSub)
+
+				if (bNoSave && FNV1A::Hash32(pBase->Name()) == FNV1A::Hash32Const("Vars::Config::LoadDebugSettings") && pBase->As<bool>()->Map[DEFAULT_BIND])
+					bNoSave = false;
 			}
 		}
 		else
-			SDK::Output("Amalgam", "Config vars not found", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
+			SDK::Output("unibox", "Config vars not found", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
 
 		if (auto tSub = tRead.get_child_optional("Groups"))
 		{
@@ -575,10 +692,11 @@ bool CConfigs::LoadConfig(const std::string& sConfigName, bool bNotify)
 				LoadJson(tChild, "TagsOverrideColor", tGroup.m_bTagsOverrideColor);
 				LoadJson(tChild, "Targets", tGroup.m_iTargets);
 				LoadJson(tChild, "Conditions", tGroup.m_iConditions);
+				LoadJson(tChild, "Roles", tGroup.m_vRoles);
 				LoadJson(tChild, "Players", tGroup.m_iPlayers);
 				LoadJson(tChild, "Buildings", tGroup.m_iBuildings);
 				LoadJson(tChild, "Projectiles", tGroup.m_iProjectiles);
-				LoadJson(tChild, "ESP", tGroup.m_iESP);
+				LoadJson(tChild, "ESP", tGroup.m_tESP);
 				LoadJson(tChild, "Chams", tGroup.m_tChams);
 				LoadJson(tChild, "Glow", tGroup.m_tGlow);
 				LoadJson(tChild, "OffscreenArrows", tGroup.m_bOffscreenArrows);
@@ -595,18 +713,19 @@ bool CConfigs::LoadConfig(const std::string& sConfigName, bool bNotify)
 			}
 		}
 		else
-			SDK::Output("Amalgam", "Config groups not found", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
+			SDK::Output("unibox", "Config groups not found", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
 
 		F::Binds.SetVars(nullptr, nullptr, false);
 		H::Fonts.Reload();
 
 		m_sCurrentConfig = sConfigName; m_sCurrentVisuals = "";
+		SaveState();
 		if (bNotify)
-			SDK::Output("Amalgam", std::format("Config {} loaded", sConfigName).c_str(), INFO_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_INFO);
+			SDK::Output("unibox", std::format("Config {} loaded", sConfigName).c_str(), INFO_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_INFO);
 	}
 	catch (...)
 	{
-		SDK::Output("Amalgam", "Load config failed", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
+		SDK::Output("unibox", "Load config failed", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
 		return false;
 	}
 
@@ -631,14 +750,15 @@ bool CConfigs::SaveVisual(const std::string& sConfigName, bool bNotify)
 {
 	try
 	{
+		std::scoped_lock lock(F::Binds.m_mMutex);
 		boost::property_tree::ptree tWrite;
 
 		{
 			boost::property_tree::ptree tSub;
-			bool bNoSave = GetAsyncKeyState(VK_SHIFT) & 0x8000;
+			bool bNoSave = !(GetAsyncKeyState(VK_SHIFT) & 0x8000);
 			for (auto& pBase : G::Vars)
 			{
-				if (!(pBase->m_iFlags & VISUAL) || !bNoSave && pBase->m_iFlags & NOSAVE)
+				if (!(pBase->m_iFlags & VISUAL) || bNoSave && pBase->m_iFlags & NOSAVE)
 					continue;
 
 				SaveMisc(bool, tSub)
@@ -647,7 +767,7 @@ bool CConfigs::SaveVisual(const std::string& sConfigName, bool bNotify)
 				else SaveMisc(IntRange_t, tSub)
 				else SaveMisc(FloatRange_t, tSub)
 				else SaveMisc(std::string, tSub)
-				else SaveMisc(VA_LIST(std::vector<std::pair<std::string, Color_t>>), tSub)
+				else SaveMisc(VA_LIST(std::vector<std::pair<std::string, ChamsMaterial_t>>), tSub)
 				else SaveMisc(Color_t, tSub)
 				else SaveMisc(Gradient_t, tSub)
 				else SaveMisc(DragBox_t, tSub)
@@ -668,10 +788,11 @@ bool CConfigs::SaveVisual(const std::string& sConfigName, bool bNotify)
 				SaveJson(tChild, "TagsOverrideColor", tGroup.m_bTagsOverrideColor);
 				SaveJson(tChild, "Targets", tGroup.m_iTargets);
 				SaveJson(tChild, "Conditions", tGroup.m_iConditions);
+				SaveJson(tChild, "Roles", tGroup.m_vRoles);
 				SaveJson(tChild, "Players", tGroup.m_iPlayers);
 				SaveJson(tChild, "Buildings", tGroup.m_iBuildings);
 				SaveJson(tChild, "Projectiles", tGroup.m_iProjectiles);
-				SaveJson(tChild, "ESP", tGroup.m_iESP);
+				SaveJson(tChild, "ESP", tGroup.m_tESP);
 				SaveJson(tChild, "Chams", tGroup.m_tChams);
 				SaveJson(tChild, "Glow", tGroup.m_tGlow);
 				SaveJson(tChild, "OffscreenArrows", tGroup.m_bOffscreenArrows);
@@ -692,13 +813,15 @@ bool CConfigs::SaveVisual(const std::string& sConfigName, bool bNotify)
 		}
 
 		write_json(m_sVisualsPath + sConfigName + m_sConfigExtension, tWrite);
+		m_sCurrentVisuals = sConfigName;
+		SaveState();
 
 		if (bNotify)
-			SDK::Output("Amalgam", std::format("Visual config {} saved", sConfigName).c_str(), INFO_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_INFO);
+			SDK::Output("unibox", std::format("Visual config {} saved", sConfigName).c_str(), INFO_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_INFO);
 	}
 	catch (...)
 	{
-		SDK::Output("Amalgam", "Save visuals failed", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
+		SDK::Output("unibox", "Save visuals failed", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
 		return false;
 	}
 	return true;
@@ -708,6 +831,7 @@ bool CConfigs::LoadVisual(const std::string& sConfigName, bool bNotify)
 {
 	try
 	{
+		std::scoped_lock lock(F::Binds.m_mMutex);
 		if (!std::filesystem::exists(m_sVisualsPath + sConfigName + m_sConfigExtension))
 			return false;
 
@@ -719,10 +843,10 @@ bool CConfigs::LoadVisual(const std::string& sConfigName, bool bNotify)
 		if (auto tSub = tRead.get_child_optional("Vars");
 			tSub || (tSub = tRead))
 		{
-			bool bNoSave = GetAsyncKeyState(VK_SHIFT) & 0x8000;
+			bool bNoSave = !(GetAsyncKeyState(VK_SHIFT) & 0x8000);
 			for (auto& pBase : G::Vars)
 			{
-				if (!(pBase->m_iFlags & VISUAL) || !bNoSave && pBase->m_iFlags & NOSAVE)
+				if (!(pBase->m_iFlags & VISUAL) || bNoSave && pBase->m_iFlags & NOSAVE)
 					continue;
 
 				LoadMisc(bool, *tSub)
@@ -731,7 +855,7 @@ bool CConfigs::LoadVisual(const std::string& sConfigName, bool bNotify)
 				else LoadMisc(IntRange_t, *tSub)
 				else LoadMisc(FloatRange_t, *tSub)
 				else LoadMisc(std::string, *tSub)
-				else LoadMisc(VA_LIST(std::vector<std::pair<std::string, Color_t>>), *tSub)
+				else LoadMisc(VA_LIST(std::vector<std::pair<std::string, ChamsMaterial_t>>), *tSub)
 				else LoadMisc(Color_t, *tSub)
 				else LoadMisc(Gradient_t, *tSub)
 				else LoadMisc(DragBox_t, *tSub)
@@ -739,7 +863,7 @@ bool CConfigs::LoadVisual(const std::string& sConfigName, bool bNotify)
 			}
 		}
 		else
-			SDK::Output("Amalgam", "Config vars not found", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
+			SDK::Output("unibox", "Config vars not found", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
 
 		if (auto tSub = tRead.get_child_optional("Groups"))
 		{
@@ -751,10 +875,11 @@ bool CConfigs::LoadVisual(const std::string& sConfigName, bool bNotify)
 				LoadJson(tChild, "TagsOverrideColor", tGroup.m_bTagsOverrideColor);
 				LoadJson(tChild, "Targets", tGroup.m_iTargets);
 				LoadJson(tChild, "Conditions", tGroup.m_iConditions);
+				LoadJson(tChild, "Roles", tGroup.m_vRoles);
 				LoadJson(tChild, "Players", tGroup.m_iPlayers);
 				LoadJson(tChild, "Buildings", tGroup.m_iBuildings);
 				LoadJson(tChild, "Projectiles", tGroup.m_iProjectiles);
-				LoadJson(tChild, "ESP", tGroup.m_iESP);
+				LoadJson(tChild, "ESP", tGroup.m_tESP);
 				LoadJson(tChild, "Chams", tGroup.m_tChams);
 				LoadJson(tChild, "Glow", tGroup.m_tGlow);
 				LoadJson(tChild, "OffscreenArrows", tGroup.m_bOffscreenArrows);
@@ -771,17 +896,18 @@ bool CConfigs::LoadVisual(const std::string& sConfigName, bool bNotify)
 			}
 		}
 		else
-			SDK::Output("Amalgam", "Config groups not found", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
+			SDK::Output("unibox", "Config groups not found", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
 
 		F::Binds.SetVars(nullptr, nullptr, false);
 
 		m_sCurrentVisuals = sConfigName;
+		SaveState();
 		if (bNotify)
-			SDK::Output("Amalgam", std::format("Visual config {} loaded", sConfigName).c_str(), INFO_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_INFO);
+			SDK::Output("unibox", std::format("Visual config {} loaded", sConfigName).c_str(), INFO_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_INFO);
 	}
 	catch (...)
 	{
-		SDK::Output("Amalgam", "Load visuals failed", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
+		SDK::Output("unibox", "Load visuals failed", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
 		return false;
 	}
 	return true;
@@ -811,11 +937,11 @@ void CConfigs::DeleteConfig(const std::string& sConfigName, bool bNotify)
 			LoadConfig("default", false);
 
 		if (bNotify)
-			SDK::Output("Amalgam", std::format("Config {} deleted", sConfigName).c_str(), INFO_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_INFO);
+			SDK::Output("unibox", std::format("Config {} deleted", sConfigName).c_str(), INFO_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_INFO);
 	}
 	catch (...)
 	{
-		SDK::Output("Amalgam", "Remove config failed", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
+		SDK::Output("unibox", "Remove config failed", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
 	}
 }
 
@@ -826,10 +952,10 @@ void CConfigs::ResetConfig(const std::string& sConfigName, bool bNotify)
 		F::Binds.m_vBinds.clear();
 		F::Groups.m_vGroups.clear();
 
-		bool bNoSave = GetAsyncKeyState(VK_SHIFT) & 0x8000;
+		bool bNoSave = !Vars::Config::LoadDebugSettings.Value && !(GetAsyncKeyState(VK_SHIFT) & 0x8000);
 		for (auto& pBase : G::Vars)
 		{
-			if (!bNoSave && pBase->m_iFlags & NOSAVE)
+			if (bNoSave && pBase->m_iFlags & NOSAVE)
 				continue;
 
 			Reset(bool)
@@ -850,11 +976,11 @@ void CConfigs::ResetConfig(const std::string& sConfigName, bool bNotify)
 		H::Fonts.Reload();
 
 		if (bNotify)
-			SDK::Output("Amalgam", std::format("Config {} reset", sConfigName).c_str(), INFO_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_INFO);
+			SDK::Output("unibox", std::format("Config {} reset", sConfigName).c_str(), INFO_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_INFO);
 	}
 	catch (...)
 	{
-		SDK::Output("Amalgam", "Reset config failed", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
+		SDK::Output("unibox", "Reset config failed", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
 	}
 }
 
@@ -865,11 +991,11 @@ void CConfigs::DeleteVisual(const std::string& sConfigName, bool bNotify)
 		std::filesystem::remove(m_sVisualsPath + sConfigName + m_sConfigExtension);
 
 		if (bNotify)
-			SDK::Output("Amalgam", std::format("Visual config {} deleted", sConfigName).c_str(), INFO_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_INFO);
+			SDK::Output("unibox", std::format("Visual config {} deleted", sConfigName).c_str(), INFO_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_INFO);
 	}
 	catch (...)
 	{
-		SDK::Output("Amalgam", "Remove visuals failed", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
+		SDK::Output("unibox", "Remove visuals failed", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
 	}
 }
 
@@ -879,10 +1005,10 @@ void CConfigs::ResetVisual(const std::string& sConfigName, bool bNotify)
 	{
 		F::Groups.m_vGroups.clear();
 
-		bool bNoSave = GetAsyncKeyState(VK_SHIFT) & 0x8000;
+		bool bNoSave = !(GetAsyncKeyState(VK_SHIFT) & 0x8000);
 		for (auto& pBase : G::Vars)
 		{
-			if (!(pBase->m_iFlags & VISUAL) || !bNoSave && pBase->m_iFlags & NOSAVE)
+			if (!(pBase->m_iFlags & VISUAL) || bNoSave && pBase->m_iFlags & NOSAVE)
 				continue;
 
 			Reset(bool)
@@ -902,10 +1028,10 @@ void CConfigs::ResetVisual(const std::string& sConfigName, bool bNotify)
 		F::Binds.SetVars(nullptr, nullptr, false);
 
 		if (bNotify)
-			SDK::Output("Amalgam", std::format("Visual config {} reset", sConfigName).c_str(), INFO_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_INFO);
+			SDK::Output("unibox", std::format("Visual config {} reset", sConfigName).c_str(), INFO_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_INFO);
 	}
 	catch (...)
 	{
-		SDK::Output("Amalgam", "Reset visuals failed", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
+		SDK::Output("unibox", "Reset visuals failed", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
 	}
 }

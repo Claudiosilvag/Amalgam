@@ -5,23 +5,120 @@
 #include "../../Configs/Configs.h"
 #include "../../Binds/Binds.h"
 #include "../Groups/Groups.h"
+#include <algorithm>
+#include <cctype>
 #include <filesystem>
 #include <fstream>
 
 IMaterial* CMaterials::Create(char const* szName, KeyValues* pKV)
 {
 	IMaterial* pMaterial = I::MaterialSystem->CreateMaterial(szName, pKV);
-	m_mMatList[pMaterial];
+	if (!pMaterial)
+		return nullptr;
+
 	return pMaterial;
+}
+
+void CMaterials::RequestLoad()
+{
+	PendingOperation expected = PendingOperation::None;
+	m_ePendingOperation.compare_exchange_strong(expected, PendingOperation::Load);
+}
+
+void CMaterials::RequestUnload()
+{
+	m_bUnloadComplete = false;
+	m_ePendingOperation = PendingOperation::Unload;
+}
+
+bool CMaterials::IsUnloadComplete() const
+{
+	return m_bUnloadComplete.load();
+}
+
+static inline void RemoveVars(Material_t& tMaterial)
+{
+	tMaterial.m_bStored = false;
+	tMaterial.m_phongtint = nullptr;
+	tMaterial.m_envmaptint = nullptr;
+	tMaterial.m_bInvertCull = false;
+	tMaterial.m_bBlockOccluded = false;
+}
+
+static inline void StoreVars(Material_t& tMaterial)
+{
+	if (tMaterial.m_bStored || !tMaterial.m_pMaterial)
+		return;
+
+	tMaterial.m_bStored = true;
+
+	bool bFound; auto $phongtint = tMaterial.m_pMaterial->FindVar("$phongtint", &bFound, false);
+	if (bFound)
+		tMaterial.m_phongtint = $phongtint;
+
+	auto $envmaptint = tMaterial.m_pMaterial->FindVar("$envmaptint", &bFound, false);
+	if (bFound)
+		tMaterial.m_envmaptint = $envmaptint;
+
+	auto $invertcull = tMaterial.m_pMaterial->FindVar("$invertcull", &bFound, false);
+	if (bFound && $invertcull && $invertcull->GetIntValueInternal())
+		tMaterial.m_bInvertCull = true;
+
+	auto $blockoccluded = tMaterial.m_pMaterial->FindVar("$blockoccluded", &bFound, false);
+	if (bFound && $blockoccluded && $blockoccluded->GetIntValueInternal())
+		tMaterial.m_bBlockOccluded = true;
+}
+
+void CMaterials::ServicePendingOperation()
+{
+	const PendingOperation operation = m_ePendingOperation.exchange(PendingOperation::None);
+	if (operation == PendingOperation::None)
+		return;
+
+	switch (operation)
+	{
+	case PendingOperation::Load:
+		if (!m_bLoaded)
+			LoadMaterials();
+		break;
+	case PendingOperation::Reload:
+		if (!m_bLoaded)
+			LoadMaterials();
+		for (auto& tMaterial : m_mMaterials | std::views::values)
+			RemoveVars(tMaterial);
+		I::MaterialSystem->ReloadMaterials();
+		F::Glow.Initialize();
+		F::CameraWindow.Initialize();
+		break;
+	case PendingOperation::Unload:
+		UnloadMaterials();
+		I::MaterialSystem->Flush(true);
+		m_bUnloadComplete = true;
+		break;
+	case PendingOperation::None:
+		break;
+	}
+}
+
+IMaterial* CMaterials::create_from_vmt(const char* name, const std::string& vmt)
+{
+	KeyValues* kv = new KeyValues(name);
+	if (!kv)
+		return nullptr;
+
+	if (!kv->LoadFromBuffer(name, vmt.c_str()))
+	{
+		kv->DeleteThis();
+		return nullptr;
+	}
+
+	return Create(name, kv);
 }
 
 void CMaterials::Remove(IMaterial* pMaterial)
 {
 	if (!pMaterial)
 		return;
-
-	if (m_mMatList.contains(pMaterial))
-		m_mMatList.erase(pMaterial);
 
 	pMaterial->DecrementReferenceCount();
 	pMaterial->DeleteIfUnreferenced();
@@ -40,53 +137,48 @@ void CMaterials::StoreStruct(const std::string& sName, const std::string& sVMT, 
 	m_mMaterials[FNV1A::Hash32(sName.c_str())] = tMaterial;
 }
 
-static inline void StoreVars(Material_t& tMaterial)
+static inline std::string to_lower(std::string value)
 {
-	if (tMaterial.m_bStored || !tMaterial.m_pMaterial)
-		return;
-
-	tMaterial.m_bStored = true;
-
-	bool bFound; auto $phongtint = tMaterial.m_pMaterial->FindVar("$phongtint", &bFound, false);
-	if (bFound)
-		tMaterial.m_phongtint = $phongtint;
-	
-	auto $envmaptint = tMaterial.m_pMaterial->FindVar("$envmaptint", &bFound, false);
-	if (bFound)
-		tMaterial.m_envmaptint = $envmaptint;
-	
-	auto $invertcull = tMaterial.m_pMaterial->FindVar("$invertcull", &bFound, false);
-	if (bFound && $invertcull && $invertcull->GetIntValueInternal())
-		tMaterial.m_bInvertCull = true;
-	
-	auto $blockoccluded = tMaterial.m_pMaterial->FindVar("$blockoccluded", &bFound, false);
-	if (bFound && $blockoccluded && $blockoccluded->GetIntValueInternal())
-		tMaterial.m_bBlockOccluded = true;
+	std::ranges::transform(value, value.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+	return value;
 }
 
-static inline void RemoveVars(Material_t& tMaterial)
+static inline bool has_material_key(const std::string& vmt, const char* key)
 {
-	tMaterial.m_bStored = false;
-	tMaterial.m_phongtint = nullptr;
-	tMaterial.m_envmaptint = nullptr;
-	tMaterial.m_bInvertCull = false;
-	tMaterial.m_bBlockOccluded = false;
+	return to_lower(vmt).find(to_lower(key)) != std::string::npos;
 }
 
-static inline void ModifyKeyValues(KeyValues* pKV)
+static inline bool is_vertex_lit_generic(const std::string& vmt)
 {
-	pKV->SetString("$model", "1"); // prevent wacko chams
+	const std::string lower = to_lower(vmt);
+	const size_t body = lower.find('{');
+	const size_t shader = lower.find("vertexlitgeneric");
+	return shader != std::string::npos && (body == std::string::npos || shader < body);
+}
 
-	if (!pKV->FindKey("$cloakfactor"))
-	{
-		pKV->SetString("$cloakpassenabled", "1");
-		auto sName = pKV->GetName();
-		if (sName && FNV1A::Hash32(sName) == FNV1A::Hash32Const("VertexLitGeneric"))
-		{
-			if (auto pProxies = pKV->FindKey("Proxies", true))
-				pProxies->FindKey("invis", true);
-		}
-	}
+static inline std::string modify_vmt(const std::string& vmt)
+{
+	const size_t insert_pos = vmt.find_last_of('}');
+	if (insert_pos == std::string::npos)
+		return vmt;
+
+	std::string modified = vmt;
+	std::string append;
+	const bool has_cloak_factor = has_material_key(vmt, "$cloakfactor");
+
+	if (!has_material_key(vmt, "$model"))
+		append += "\n\t$model \"1\"";
+
+	if (!has_cloak_factor && !has_material_key(vmt, "$cloakpassenabled"))
+		append += "\n\t$cloakpassenabled \"1\"";
+
+	if (!has_cloak_factor && is_vertex_lit_generic(vmt) && !has_material_key(vmt, "proxies"))
+		append += "\n\tProxies\n\t{\n\t\tinvis\n\t\t{\n\t\t}\n\t}";
+
+	if (!append.empty())
+		modified.insert(insert_pos, append);
+
+	return modified;
 }
 
 
@@ -186,12 +278,8 @@ void CMaterials::LoadMaterials()
 	// create materials
 	for (auto& tMaterial : m_mMaterials | std::views::values)
 	{
-		KeyValues* kv = new KeyValues(tMaterial.m_sName.c_str());
-		if (!kv->LoadFromBuffer(tMaterial.m_sName.c_str(), tMaterial.m_sVMT.c_str()))
-			continue;
-
-		ModifyKeyValues(kv);
-		tMaterial.m_pMaterial = Create(tMaterial.m_sName.c_str(), kv);
+		const std::string material_vmt = modify_vmt(tMaterial.m_sVMT);
+		tMaterial.m_pMaterial = create_from_vmt(tMaterial.m_sName.c_str(), material_vmt);
 		//StoreVars(tMaterial);
 	}
 
@@ -200,7 +288,8 @@ void CMaterials::LoadMaterials()
 
 	S::InitializeStandardMaterials.Call<void>();
 	auto pMaterial = *reinterpret_cast<IMaterial**>(U::Memory.RelToAbs(S::Wireframe()));
-	pMaterial->SetMaterialVarFlag(MATERIAL_VAR_VERTEXALPHA, true);
+	if (pMaterial)
+		pMaterial->SetMaterialVarFlag(MATERIAL_VAR_VERTEXALPHA, true);
 
 	static std::unordered_map<std::string, int> mSkyboxes = {};
 	static std::vector<const char*> vFaces = { "rt.vmt", "lf.vmt", "bk.vmt", "ft.vmt", "up.vmt", "dn.vmt" };
@@ -238,21 +327,22 @@ void CMaterials::LoadMaterials()
 void CMaterials::UnloadMaterials()
 {
 	m_bLoaded = false;
+	
+	F::Glow.Unload();
+	F::CameraWindow.Unload();
 
 	for (auto& tMaterial : m_mMaterials | std::views::values)
 		Remove(tMaterial.m_pMaterial);
 	m_mMaterials.clear();
-	m_mMatList.clear();
-
-	F::Glow.Unload();
-	F::CameraWindow.Unload();
 }
 
 void CMaterials::ReloadMaterials()
 {
-	UnloadMaterials();
-
-	LoadMaterials();
+	PendingOperation pending = m_ePendingOperation.load();
+	while (pending != PendingOperation::Unload
+		&& !m_ePendingOperation.compare_exchange_weak(pending, PendingOperation::Reload))
+	{
+	}
 }
 
 
@@ -310,12 +400,11 @@ void CMaterials::AddMaterial(const char* sName)
 		);
 	auto& tMaterial = m_mMaterials[uHash];
 
-	KeyValues* kv = new KeyValues(sName);
-	if (!kv->LoadFromBuffer(sName, tMaterial.m_sVMT.c_str()))
+	const std::string material_vmt = modify_vmt(tMaterial.m_sVMT);
+	tMaterial.m_pMaterial = create_from_vmt(sName, material_vmt);
+	if (!tMaterial.m_pMaterial)
 		return;
 
-	ModifyKeyValues(kv);
-	tMaterial.m_pMaterial = Create(sName, kv);
 	//StoreVars(tMaterial);
 
 	std::ofstream outStream(F::Configs.m_sMaterialsPath + sName + ".vmt");
@@ -339,12 +428,14 @@ void CMaterials::EditMaterial(const char* sName, const char* sVMT)
 		RemoveVars(tMaterial);
 		tMaterial.m_sVMT = sVMT;
 
-		KeyValues* kv = new KeyValues(sName);
-		if (!kv->LoadFromBuffer(sName, sVMT))
+		const std::string material_vmt = modify_vmt(sVMT);
+		tMaterial.m_pMaterial = create_from_vmt(sName, material_vmt);
+		if (!tMaterial.m_pMaterial)
+		{
+			m_bLoaded = true;
 			return;
+		}
 
-		ModifyKeyValues(kv);
-		tMaterial.m_pMaterial = Create(sName, kv);
 		//StoreVars(tMaterial);
 
 		std::ofstream outStream(F::Configs.m_sMaterialsPath + sName + ".vmt");
@@ -370,7 +461,7 @@ void CMaterials::RemoveMaterial(const char* sName)
 
 		std::filesystem::remove(F::Configs.m_sMaterialsPath + sName + ".vmt");
 
-		auto fRemoveFromVal = [&](std::vector<std::pair<std::string, Color_t>>& val)
+		auto fRemoveFromVal = [&](std::vector<std::pair<std::string, ChamsMaterial_t>>& val)
 		{
 			for (auto it = val.begin(); it != val.end();)
 			{
@@ -380,7 +471,7 @@ void CMaterials::RemoveMaterial(const char* sName)
 					++it;
 			}
 		};
-		auto fRemoveFromVar = [&](ConfigVar<std::vector<std::pair<std::string, Color_t>>>& var)
+		auto fRemoveFromVar = [&](ConfigVar<std::vector<std::pair<std::string, ChamsMaterial_t>>>& var)
 		{
 			for (auto& [iBind, vVal] : var.Map)
 			{

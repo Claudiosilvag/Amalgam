@@ -82,8 +82,9 @@ void CVisuals::ProjectileTrace(CTFPlayer* pPlayer, CTFWeaponBase* pWeapon, const
 		return;
 
 	CGameTrace trace = {};
-	CTraceFilterCollideable filter = {};
-	filter.pSkip = pPlayer;
+	CBaseEntity* pSkip = tProjInfo.m_uType == FNV1A::Hash32Const("models/buildables/sentry3_rockets.mdl") ? tProjInfo.m_pOwner->GetObjectOfType(OBJ_SENTRYGUN)->As<CBaseEntity>() : tProjInfo.m_pOwner;
+	CTraceFilterCollideable filter(pSkip);
+
 	int nMask = MASK_SOLID;
 	F::ProjSim.SetupTrace(filter, nMask, pWeapon, 0, bInterp);
 	Vec3* pNormal = nullptr;
@@ -122,6 +123,7 @@ void CVisuals::ProjectileTrace(CTFPlayer* pPlayer, CTFWeaponBase* pWeapon, const
 		case TF_WEAPON_ROCKETLAUNCHER:
 		case TF_WEAPON_ROCKETLAUNCHER_DIRECTHIT:
 		case TF_WEAPON_PARTICLE_CANNON:
+		case TF_WEAPON_LASER_POINTER:
 			if (Vars::Visuals::Simulation::SplashRadius.Value & Vars::Visuals::Simulation::SplashRadiusEnum::Rockets)
 				flRadius = TF_ROCKET_RADIUS;
 			break;
@@ -270,6 +272,185 @@ void CVisuals::DrawPickupTimers()
 	}
 }
 
+static bool StoreTriggerBrushSurfaces(TriggerData_t& tTrigger)
+{
+	return SDK::BuildTriggerGeometry(tTrigger);
+}
+static bool ShouldShowTrigger(TriggerTypeEnum::TriggerTypeEnum eType)
+{
+	switch (eType)
+	{
+	case TriggerTypeEnum::Hurt:
+		return Vars::Visuals::World::ShowTriggers.Value & Vars::Visuals::World::ShowTriggersEnum::Hurt;
+	case TriggerTypeEnum::Ignite:
+		return Vars::Visuals::World::ShowTriggers.Value & Vars::Visuals::World::ShowTriggersEnum::Ignite;
+	case TriggerTypeEnum::Push:
+		return Vars::Visuals::World::ShowTriggers.Value & Vars::Visuals::World::ShowTriggersEnum::Push;
+	case TriggerTypeEnum::Regenerate:
+		return Vars::Visuals::World::ShowTriggers.Value & Vars::Visuals::World::ShowTriggersEnum::Regenerate;
+	case TriggerTypeEnum::RespawnRoom:
+		return Vars::Visuals::World::ShowTriggers.Value & Vars::Visuals::World::ShowTriggersEnum::RespawnRoom;
+	case TriggerTypeEnum::CaptureArea:
+		return Vars::Visuals::World::ShowTriggers.Value & Vars::Visuals::World::ShowTriggersEnum::CaptureArea;
+	case TriggerTypeEnum::Catapult:
+		return Vars::Visuals::World::ShowTriggers.Value & Vars::Visuals::World::ShowTriggersEnum::Catapult;
+	case TriggerTypeEnum::ApplyImpulse:
+		return Vars::Visuals::World::ShowTriggers.Value & Vars::Visuals::World::ShowTriggersEnum::ApplyImpulse;
+	default:
+		break;
+	}
+	return false;
+}
+static Color_t GetTriggerColor(TriggerTypeEnum::TriggerTypeEnum eType)
+{
+	switch (eType)
+	{
+	case TriggerTypeEnum::Hurt:
+		return Vars::Colors::HurtTrigger.Value;
+	case TriggerTypeEnum::Ignite:
+		return Vars::Colors::IgniteTrigger.Value;
+	case TriggerTypeEnum::Push:
+		return Vars::Colors::PushTrigger.Value;
+	case TriggerTypeEnum::Regenerate:
+		return Vars::Colors::RegenerateTrigger.Value;
+	case TriggerTypeEnum::RespawnRoom:
+		return Vars::Colors::RespawnRoomTrigger.Value;
+	case TriggerTypeEnum::CaptureArea:
+		return Vars::Colors::CaptureAreaTrigger.Value;
+	case TriggerTypeEnum::Catapult:
+		return Vars::Colors::CatapultTrigger.Value;
+	case TriggerTypeEnum::ApplyImpulse:
+		return Vars::Colors::ApplyImpulseTrigger.Value;
+	default:
+		break;
+	}
+	return Color_t();
+}
+
+void CVisuals::Triggers(CTFPlayer* pLocal)
+{
+	if (!Vars::Visuals::World::ShowTriggers.Value || G::TriggerStorage.empty())
+		return;
+
+	std::erase_if(G::TriggerStorage, [](auto& tTriggerData)
+				  {
+					  if (!tTriggerData.m_pModel)
+						  return true;
+
+					  if (tTriggerData.m_vBrushSurfaces.empty() && !StoreTriggerBrushSurfaces(tTriggerData))
+						  return true;
+
+					  return false;
+				  });
+
+
+	// Should fix rendering issues with huge amounts of triggers
+	bool bRenderFar = G::TriggerStorage.size() < 20;
+	static Vector vLocalOrigin;
+	if (pLocal && pLocal->IsAlive())
+		vLocalOrigin = pLocal->GetAbsOrigin();
+
+	bool bIgnoreZ = Vars::Visuals::World::ShowTriggers.Value & Vars::Visuals::World::ShowTriggersEnum::IgnoreZ;
+	for (auto& tTrigger : G::TriggerStorage)
+	{
+		if (!ShouldShowTrigger(tTrigger.m_eType))
+			continue;
+
+		if (!bRenderFar && tTrigger.m_vCenter.DistTo(vLocalOrigin) >= 6000.f)
+			continue;
+
+		Color_t tColor = GetTriggerColor(tTrigger.m_eType);
+		for (auto& tSurf : tTrigger.m_vBrushSurfaces)
+		{
+			if (!bRenderFar && tSurf.m_vCenter.DistTo(vLocalOrigin) >= 2000.f)
+				continue;
+
+			Vector& vStart = tSurf.m_vPoints.front();
+			auto begin = tSurf.m_vPoints.begin() + 1;
+
+			// Dont draw too much or else the game will crash
+			bool bTooManyPoints = tSurf.m_vPoints.size() > 10;
+			for (auto it = begin, next = it + 1; next != tSurf.m_vPoints.end(); it++, next++)
+			{
+				Vector& vPoint1 = *it, & vPoint2 = *next;
+				H::Draw.RenderTriangle(vPoint1, vPoint2, vStart, tColor, !bIgnoreZ);
+
+				if (!bTooManyPoints && Vars::Visuals::World::ShowTriggers.Value & Vars::Visuals::World::ShowTriggersEnum::ShowSurfaceCenters)
+				{
+					if (it == begin)
+					{
+						auto vAngleToFirst = Math::CalcAngle(tSurf.m_vCenter, vPoint1);
+						auto vRotatedFirst = tSurf.m_vCenter + Math::RotatePoint({ 50, 0, 0 }, {}, vAngleToFirst);
+						H::Draw.RenderLine(tSurf.m_vCenter, vRotatedFirst, Vars::Colors::TriggerSurfaceCenter.Value, !bIgnoreZ);
+					}
+					auto vAngleTo = Math::CalcAngle(tSurf.m_vCenter, vPoint2);
+					auto vRotated = tSurf.m_vCenter + Math::RotatePoint({ 50, 0, 0 }, {}, vAngleTo);
+					H::Draw.RenderLine(tSurf.m_vCenter, vRotated, Vars::Colors::TriggerSurfaceCenter.Value, !bIgnoreZ);
+				}
+			}
+
+			if (Vars::Visuals::World::ShowTriggers.Value & Vars::Visuals::World::ShowTriggersEnum::ShowSurfaceCenters)
+			{
+				if (!bTooManyPoints)
+				{
+					auto vAngleTo = Math::CalcAngle(tSurf.m_vCenter, vStart);
+					auto vRotated = tSurf.m_vCenter + Math::RotatePoint({ 50, 0, 0 }, {}, vAngleTo);
+					H::Draw.RenderLine(tSurf.m_vCenter, vRotated, Vars::Colors::TriggerSurfaceCenter.Value, !bIgnoreZ);
+				}
+				H::Draw.RenderBox(tSurf.m_vCenter, Vector(-1.0f, -1.0f, -1.0f), Vector(1.0f, 1.0f, 1.0f), Vector(), Vars::Colors::TriggerSurfaceCenter.Value, !bIgnoreZ);
+				H::Draw.RenderWireframeBox(tSurf.m_vCenter, Vector(-1.0f, -1.0f, -1.0f), Vector(1.0f, 1.0f, 1.0f), Vector(), Vars::Colors::TriggerSurfaceCenter.Value, !bIgnoreZ);
+			}
+		}
+		if (Vars::Visuals::World::ShowTriggers.Value & Vars::Visuals::World::ShowTriggersEnum::ShowAngles &&
+			(tTrigger.m_eType == TriggerTypeEnum::Push || tTrigger.m_eType == TriggerTypeEnum::Catapult || tTrigger.m_eType == TriggerTypeEnum::ApplyImpulse))
+		{
+			auto vRotated = tTrigger.m_vCenter + Math::RotatePoint({ 50, 0, 0 }, {}, tTrigger.m_vAngles);
+			H::Draw.RenderLine(tTrigger.m_vCenter, vRotated, Vars::Colors::TriggerAngle.Value, !bIgnoreZ);
+		}
+	}
+}
+
+#ifdef DEBUG_UNI
+void CVisuals::DrawUni()
+{
+	static float flStartDrawTime = 0.f;
+	if (m_pCurrentUniTexture && I::GlobalVars->curtime > flStartDrawTime + 1.f)
+	{
+		m_pCurrentUniTexture = nullptr;
+		return;
+	}
+
+	if (m_bUniDraw)
+	{
+		flStartDrawTime = I::GlobalVars->curtime;
+		m_bUniDraw = false;
+
+		auto pTextureInfo = &m_aUniTextures[SDK::RandomInt(0, 5)];
+		if (!pTextureInfo->m_iTextureID)
+			pTextureInfo->m_iTextureID = H::Draw.CreateTextureFromArray(pTextureInfo->m_pArray, pTextureInfo->m_iWidth, pTextureInfo->m_iHeight);
+		m_pCurrentUniTexture = pTextureInfo;
+	}
+
+	if (!m_pCurrentUniTexture || SDK::CleanScreenshot())
+		return;
+
+	H::Draw.Start();
+	{
+		float flScale = std::clamp(I::GlobalVars->curtime - flStartDrawTime, 0.f, 1.f);
+		I::MatSystemSurface->DrawSetColor(Color_t(255, 255, 255, Math::RemapVal(flScale, 0.1f, 1.f, 255, 13)));
+		I::MatSystemSurface->DrawSetTexture(m_pCurrentUniTexture->m_iTextureID);
+
+		int iImageHalfW = m_pCurrentUniTexture->m_iWidth / 2;
+		int iScreenHalfW = H::Draw.m_nScreenW / 2;
+		int iImageHalfH = m_pCurrentUniTexture->m_iHeight / 2;
+		int iScreenHalfH = H::Draw.m_nScreenH / 2;
+		int iResizeW = flScale * iScreenHalfW;
+		int iResizeH = flScale * iScreenHalfH;
+		I::MatSystemSurface->DrawTexturedRect(iScreenHalfW - iImageHalfW - iResizeW, iScreenHalfH - iImageHalfH - iResizeH, iScreenHalfW + iImageHalfW + iResizeW, iScreenHalfH + iImageHalfH + iResizeH);
+	}
+	H::Draw.End();
+}
+#endif
 
 
 std::vector<DrawBox_t> CVisuals::GetHitboxes(matrix3x4* aBones, CBaseAnimating* pEntity, std::vector<int> vHitboxes, int iTarget)
@@ -330,9 +511,28 @@ std::vector<DrawBox_t> CVisuals::GetHitboxes(matrix3x4* aBones, CBaseAnimating* 
 
 void CVisuals::DrawEffects()
 {
+	auto is_finite_vec3 = [](const Vec3& v) -> bool
+	{
+		return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
+	};
+
+	auto has_sane_extents = [&](const Vec3& vMins, const Vec3& vMaxs) -> bool
+	{
+		if (!is_finite_vec3(vMins) || !is_finite_vec3(vMaxs))
+			return false;
+
+		const Vec3 vSize = vMaxs - vMins;
+		return std::isfinite(vSize.x) && std::isfinite(vSize.y) && std::isfinite(vSize.z)
+			&& fabsf(vSize.x) <= 16384.0f
+			&& fabsf(vSize.y) <= 16384.0f
+			&& fabsf(vSize.z) <= 16384.0f;
+	};
+
 	for (auto& tLine : G::LineStorage)
 	{
 		if (tLine.m_flTime < I::GlobalVars->curtime)
+			continue;
+		if (!is_finite_vec3(tLine.m_paOrigin.first) || !is_finite_vec3(tLine.m_paOrigin.second))
 			continue;
 
 		H::Draw.RenderLine(tLine.m_paOrigin.first, tLine.m_paOrigin.second, tLine.m_tColor, tLine.m_bZBuffer);
@@ -343,11 +543,25 @@ void CVisuals::DrawEffects()
 		if (!bTimed && tPath.m_flTime < I::GlobalVars->curtime)
 			continue;
 
+		bool bInvalidPath = false;
+		for (const auto& vPoint : tPath.m_vPath)
+		{
+			if (!is_finite_vec3(vPoint))
+			{
+				bInvalidPath = true;
+				break;
+			}
+		}
+		if (bInvalidPath)
+			continue;
+
 		H::Draw.RenderPath(tPath.m_vPath, tPath.m_tColor, tPath.m_bZBuffer, tPath.m_iStyle, tPath.m_flTime);
 	}
 	for (auto& tBox : G::BoxStorage)
 	{
 		if (tBox.m_flTime < I::GlobalVars->curtime)
+			continue;
+		if (!is_finite_vec3(tBox.m_vOrigin) || !is_finite_vec3(tBox.m_vAngles) || !has_sane_extents(tBox.m_vMins, tBox.m_vMaxs))
 			continue;
 
 		H::Draw.RenderBox(tBox.m_vOrigin, tBox.m_vMins, tBox.m_vMaxs, tBox.m_vAngles, tBox.m_tColorFace, tBox.m_bZBuffer);
@@ -357,6 +571,8 @@ void CVisuals::DrawEffects()
 	{
 		if (tSphere.m_flTime < I::GlobalVars->curtime)
 			continue;
+		if (!is_finite_vec3(tSphere.m_vOrigin) || !std::isfinite(tSphere.m_flRadius) || tSphere.m_flRadius <= 0.0f || tSphere.m_flRadius > 8192.0f)
+			continue;
 
 		H::Draw.RenderSphere(tSphere.m_vOrigin, tSphere.m_flRadius, tSphere.m_nTheta, tSphere.m_nPhi, tSphere.m_tColorFace, tSphere.m_bZBuffer);
 		H::Draw.RenderWireframeSphere(tSphere.m_vOrigin, tSphere.m_flRadius, tSphere.m_nTheta, tSphere.m_nPhi, tSphere.m_tColorEdge, tSphere.m_bZBuffer);
@@ -364,6 +580,8 @@ void CVisuals::DrawEffects()
 	for (auto& tSwept : G::SweptStorage)
 	{
 		if (tSwept.m_flTime < I::GlobalVars->curtime)
+			continue;
+		if (!is_finite_vec3(tSwept.m_paOrigin.first) || !is_finite_vec3(tSwept.m_paOrigin.second) || !is_finite_vec3(tSwept.m_vAngles) || !has_sane_extents(tSwept.m_vMins, tSwept.m_vMaxs))
 			continue;
 
 		H::Draw.RenderWireframeSweptBox(tSwept.m_paOrigin.first, tSwept.m_paOrigin.second, tSwept.m_vMins, tSwept.m_vMaxs, tSwept.m_vAngles, tSwept.m_tColor, tSwept.m_bZBuffer);
@@ -435,7 +653,7 @@ void CVisuals::DrawHitboxes(int iStore)
 		for (auto& pEntity : H::Entities.GetGroup(EntityEnum::PlayerAll))
 		{
 			auto pPlayer = pEntity->As<CTFPlayer>();
-			if (pPlayer->entindex() == I::EngineClient->GetLocalPlayer() && !I::Input->CAM_IsThirdPerson() || !pPlayer->IsAlive())
+			if (pPlayer->entindex() == I::EngineClient->GetLocalPlayer() && !I::Input->CAM_IsThirdPerson() || pPlayer->IsDormant() || !pPlayer->IsAlive())
 				continue;
 
 			if (auto aBones = F::Backtrack.GetBones(pEntity))
@@ -471,6 +689,43 @@ void CVisuals::DrawHitboxes(int iStore)
 			tBox.m_tColorEdge = { 255, 255, 255, 255 };
 		s_vLocalHitboxes.insert(s_vLocalHitboxes.end(), vBoxes.begin(), vBoxes.end());
 	}
+	}
+}
+
+void CVisuals::DrawBestAimPos(CTFPlayer* pLocal)
+{
+	if (!Vars::Visuals::Prediction::BestAimPos.Value || !Vars::Colors::AimPosColor.Value.a || F::AimbotProjectile.m_flAimAnglesSetTime < I::GlobalVars->curtime - TICK_INTERVAL)
+	{
+		if (I::GlobalVars->curtime - F::AimbotProjectile.m_flAimAnglesSetTime > 0.5f)
+			m_vPrevAimAngles = {};
+		return;
+	}
+
+	// Smoothing
+	if (!m_vPrevAimAngles.IsZero())
+	{
+		float flFov = Math::CalcFov(m_vPrevAimAngles, F::AimbotProjectile.m_vAimAngles);
+		m_vPrevAimAngles = m_vPrevAimAngles.LerpAngle(F::AimbotProjectile.m_vAimAngles, Math::RemapVal(flFov, 180.f, 5.f, 0.6f, 0.05f));
+	}
+	else m_vPrevAimAngles = F::AimbotProjectile.m_vAimAngles;
+	
+	Vec3 vPoint;
+	{
+		Vec3 vStartPos = pLocal->GetEyePosition();
+		Vec3 vForward; Math::AngleVectors(m_vPrevAimAngles, &vForward);
+		Vec3 vEndPos = vStartPos + vForward * 8192;
+
+		CGameTrace trace = {};
+		CTraceFilterHitscan filter(pLocal);
+		SDK::Trace(vStartPos, vEndPos, MASK_SHOT, &filter, &trace);
+		vPoint = trace.endpos;
+	}
+
+	Vec3 vScreen;
+	if (SDK::W2S(vPoint, vScreen))
+	{
+		Color_t tColor = Vars::Colors::AimPosColor.Value.Lerp(Vars::Colors::AimPosColor.Value.IsColorDark() ? Color_t{ 255, 255, 255, 255 } : Color_t{ 0, 0, 0, 0 }, 0.35f, LerpEnum::NoAlpha);
+		H::Draw.FillRectOutline(vScreen.x, vScreen.y, 10, 10, tColor, Vars::Colors::AimPosColor.Value);
 	}
 }
 
@@ -586,7 +841,7 @@ void CVisuals::ThirdPerson(CTFPlayer* pLocal, CViewSetup* pView)
 		Vec3 vStart = vOrigin;
 		Vec3 vEnd = vOrigin + vOffset;
 
-		if (Vars::Visuals::Thirdperson::Collide.Value)
+		if (Vars::Visuals::Thirdperson::Collision.Value)
 		{
 			float flHull = 9.f * flScale;
 			Vec3 vMins = { -flHull, -flHull, -flHull }, vMaxs = { flHull, flHull, flHull };
@@ -761,8 +1016,8 @@ void CVisuals::Store()
 					continue;
 
 				CGameTrace trace = {};
-				CTraceFilterCollideable filter = {};
-				filter.pSkip = tProjInfo.m_pOwner;
+				CBaseEntity* pSkip = tProjInfo.m_uType == FNV1A::Hash32Const("models/buildables/sentry3_rockets.mdl") && tProjInfo.m_pOwner ? tProjInfo.m_pOwner->GetObjectOfType(OBJ_SENTRYGUN)->As<CBaseEntity>() : tProjInfo.m_pOwner;
+				CTraceFilterCollideable filter(pSkip);
 				int nMask = MASK_SOLID;
 				F::ProjSim.SetupTrace(filter, nMask, pEntity);
 
@@ -789,10 +1044,12 @@ void CVisuals::Store()
 			}
 		}
 
-		for (auto& pEntity : m_mProjectiles | std::views::keys)
+		for (auto it = m_mProjectiles.begin(); it != m_mProjectiles.end();)
 		{
-			if (!mProjectiles.contains(pEntity))
-				m_mProjectiles.erase(pEntity);
+			if (!mProjectiles.contains(it->first))
+				it = m_mProjectiles.erase(it);
+			else
+				++it;
 		}
 	}
 
@@ -805,11 +1062,13 @@ void CVisuals::Store()
 				mDots[pOwner] = pEntity->m_vecOrigin();
 		}
 
+		int iLocalIndex = I::EngineClient->GetLocalPlayer();
 		for (auto pEntity : H::Entities.GetGroup(EntityEnum::PlayerAll))
 		{
 			auto pPlayer = pEntity->As<CTFPlayer>();
-			if (pPlayer->entindex() == I::EngineClient->GetLocalPlayer() || pPlayer->IsDormant()
-				|| !F::Groups.GetGroup(pEntity, pGroup, false) || !(pGroup->m_iSightlines & SightlinesEnum::Enabled))
+			if (pPlayer->entindex() == iLocalIndex || pPlayer->IsDormant() 
+				|| !F::Groups.GetGroup(pEntity, pGroup, false) 
+				|| !(pGroup->m_iSightlines & SightlinesEnum::Enabled))
 				continue;
 
 			auto pWeapon = pPlayer->m_hActiveWeapon()->As<CTFWeaponBase>();
@@ -822,8 +1081,7 @@ void CVisuals::Store()
 			Vec3 vShootEnd = mDots.contains(pPlayer) ? mDots[pPlayer] : vShootPos + (vForward * 8192.f);
 
 			CGameTrace trace = {};
-			CTraceFilterHitscan filter = {};
-			filter.pSkip = pPlayer;
+			CTraceFilterHitscan filter(pPlayer);
 			SDK::Trace(vShootPos, vShootEnd, MASK_SHOT, &filter, &trace);
 
 			m_vSightLines.emplace_back(vShootPos, trace.endpos, F::Groups.GetColor(pPlayer, pGroup), !(pGroup->m_iSightlines & SightlinesEnum::IgnoreZ));
@@ -858,31 +1116,37 @@ void CVisuals::OverrideWorldTextures()
 		return;
 	}
 
-	KeyValues* kv = new KeyValues("LightmappedGeneric");
-	if (!kv)
-		return;
-
+	std::string texture_name;
+	std::string extra_vmt;
 	switch (uHash)
 	{
 	case FNV1A::Hash32Const("Dev"):
-		kv->SetString("$basetexture", "dev/dev_measuregeneric01b");
+		texture_name = "dev/dev_measuregeneric01b";
 		break;
 	case FNV1A::Hash32Const("Camo"):
-		kv->SetString("$basetexture", "patterns/paint_strokes");
+		texture_name = "patterns/paint_strokes";
 		break;
 	case FNV1A::Hash32Const("Black"):
-		kv->SetString("$basetexture", "patterns/combat/black");
+		texture_name = "patterns/combat/black";
 		break;
 	case FNV1A::Hash32Const("White"):
-		kv->SetString("$basetexture", "patterns/combat/white");
+		texture_name = "patterns/combat/white";
 		break;
 	case FNV1A::Hash32Const("Gray"):
-		kv->SetString("$basetexture", "vgui/white_additive");
-		kv->SetString("$color2", "[0.12 0.12 0.15]");
+		texture_name = "vgui/white_additive";
+		extra_vmt = "\n\t$color2 \"[0.12 0.12 0.15]\"";
 		break;
 	default:
-		kv->SetString("$basetexture", Vars::Visuals::World::WorldTexture.Value.c_str());
+		texture_name = Vars::Visuals::World::WorldTexture.Value;
 	}
+
+	std::string vmt =
+		"\"LightmappedGeneric\""
+		"\n{"
+		"\n\t$basetexture \"" + texture_name + "\"" + extra_vmt +
+		"\n}";
+	m_v_world_texture_key_values.reserve(m_v_world_texture_key_values.size() + I::MaterialSystem->GetNumMaterials());
+	MaterialLock_t material_lock = I::MaterialSystem->Lock();
 
 	for (auto h = I::MaterialSystem->FirstMaterial(); h != I::MaterialSystem->InvalidMaterial(); h = I::MaterialSystem->NextMaterial(h))
 	{
@@ -897,8 +1161,21 @@ void CVisuals::OverrideWorldTextures()
 			|| sName.find("water") != std::string_view::npos)
 			continue;
 
+		KeyValues* kv = new KeyValues("LightmappedGeneric");
+		if (!kv)
+			continue;
+
+		if (!kv->LoadFromBuffer("LightmappedGeneric", vmt.c_str()))
+		{
+			kv->DeleteThis();
+			continue;
+		}
+
 		pMaterial->SetShaderAndParams(kv);
+		m_v_world_texture_key_values.push_back(kv);
 	}
+
+	I::MaterialSystem->Unlock(material_lock);
 }
 
 static inline void ApplyModulation(Color_t tColor, bool bSky = false)
@@ -987,12 +1264,18 @@ public:
 };
 #endif
 
-void CVisuals::CreateMove(CTFPlayer* pLocal, CTFWeaponBase* pWeapon)
+void CVisuals::CreateMove(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd)
 {
-	if (Vars::Visuals::Simulation::ShotPath.Value && G::Attacking == 1 && !F::Aimbot.m_bRan)
+	if (Vars::Visuals::Simulation::ShotPath.Value && G::Attacking == 1 && F::Aimbot.m_eRanType != EWeaponType::PROJECTILE)
 	{
 		switch (pWeapon->GetWeaponID())
 		{
+		case TF_WEAPON_MECHANICAL_ARM:
+		case TF_WEAPON_LASER_POINTER:
+			if (pCmd->buttons & IN_ATTACK2 && G::CanSecondaryAttack)
+				F::Visuals.ProjectileTrace(pLocal, pWeapon, false);
+			break;
+
 		case TF_WEAPON_BAT_WOOD:
 		case TF_WEAPON_BAT_GIFTWRAP:
 			if (!G::Throwing)
@@ -1029,11 +1312,13 @@ void CVisuals::CreateMove(CTFPlayer* pLocal, CTFWeaponBase* pWeapon)
 		uOldHashBeam = uHashBeam, uOldHashCharge = uHashCharge;
 	}
 
-	if (Vars::Visuals::Effects::SpellFootsteps.Value && (F::Ticks.m_bDoubletap || F::Ticks.m_bWarp))
+	const bool bLocalPlayer = pLocal && pLocal->IsAlive() && !pLocal->IsDormant() && I::EngineClient->IsConnected() && I::EngineClient->IsInGame();
+
+	if (Vars::Visuals::Effects::SpellFootsteps.Value && (F::Ticks.m_bDoubletap || F::Ticks.m_bWarp) && bLocalPlayer)
 		pLocal->FireEvent(pLocal->GetAbsOrigin(), QAngle(), 7001, nullptr);
 
 	DrawHitboxes(2);
-
+	
 #ifdef WORLD_DEBUG
 	if (auto pLocal = H::Entities.GetLocal(); Vars::World::Faces.Value && pLocal && I::Input->CAM_IsThirdPerson())
 	{
@@ -1081,14 +1366,14 @@ void CVisuals::CreateMove(CTFPlayer* pLocal, CTFWeaponBase* pWeapon)
 #endif
 }
 
-void CVisuals::LocalAnimations(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd, bool bSendPacket)
+void CVisuals::LocalAnimations(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd)
 {
 	m_vAngles.push_back(pCmd->viewangles);
 	if (pWeapon)
 		pWeapon->UpdateAllViewmodelAddons();
 
 	auto pAnimState = pLocal->m_PlayerAnimState();
-	if (!bSendPacket || !pAnimState)
+	if (!G::SendPacket || !pAnimState)
 		return;
 
 	float flOldFrametime = I::GlobalVars->frametime;
@@ -1108,3 +1393,15 @@ void CVisuals::LocalAnimations(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserC
 
 	F::FakeAngle.Run(pLocal);
 }
+
+#ifdef DEBUG_UNI
+void CVisuals::RemoveUni()
+{
+	for (const auto& tTextureInfo : m_aUniTextures)
+	{
+		if (!tTextureInfo.m_iTextureID) continue;
+		I::MatSystemSurface->DeleteTextureByID(tTextureInfo.m_iTextureID);
+		I::MatSystemSurface->DestroyTextureID(tTextureInfo.m_iTextureID);
+	}
+}
+#endif

@@ -11,6 +11,9 @@ MAKE_HOOK(CNetChannel_SendNetMsg, S::CNetChannel_SendNetMsg(), bool,
 	CNetChannel* pNetChan, INetMessage& msg, bool bForceReliable, bool bVoice)
 {
 	DEBUG_RETURN(CNetChannel_SendNetMsg, pNetChan, msg, bForceReliable, bVoice);
+	
+	if (G::Unload)
+		return CALL_ORIGINAL(pNetChan, msg, bForceReliable, bVoice);
 
 	switch (msg.GetType())
 	{
@@ -42,26 +45,15 @@ MAKE_HOOK(CNetChannel_SendNetMsg, S::CNetChannel_SendNetMsg(), bool,
 					strncpy_s(localCvar->Value, std::to_string(std::max(iValue, 10)).c_str(), MAX_OSPATH);
 				} catch (...) {}; }
 				break;
+			/*
 			case FNV1A::Hash32Const("cl_updaterate"):
 				if (F::Misc.m_iWishUpdaterate != -1)
 					strncpy_s(localCvar->Value, std::to_string(F::Misc.m_iWishUpdaterate).c_str(), MAX_OSPATH);
 				break;
+			*/
 			case FNV1A::Hash32Const("cl_interp_ratio"):
 			case FNV1A::Hash32Const("cl_interpolate"):
 				strncpy_s(localCvar->Value, "1", MAX_OSPATH);
-			}
-
-			if (Vars::Debug::Logging.Value)
-			{
-				switch (FNV1A::Hash32(localCvar->Name))
-				{
-				case FNV1A::Hash32Const("cl_interp"):
-				case FNV1A::Hash32Const("cl_interp_ratio"):
-				case FNV1A::Hash32Const("cl_interpolate"):
-				case FNV1A::Hash32Const("cl_cmdrate"):
-				case FNV1A::Hash32Const("cl_updaterate"):
-					SDK::Output("SendNetMsg", std::format("{}: {}", localCvar->Name, localCvar->Value).c_str(), { 100, 0, 255 });
-				}
 			}
 		}
 		break;
@@ -71,57 +63,12 @@ MAKE_HOOK(CNetChannel_SendNetMsg, S::CNetChannel_SendNetMsg(), bool,
 		F::AntiCheatCompatibility.RespondCvarValue(msg);
 		break;
 	}
-	case clc_Move:
-	{
-		const auto pMsg = reinterpret_cast<CLC_Move*>(&msg);
-
-		{
-			int nLastOutGoingCommand = I::ClientState->lastoutgoingcommand;
-			int nChokedCommands = I::ClientState->chokedcommands;
-			int nNextCommandNr = nLastOutGoingCommand + nChokedCommands + 1;
-
-			byte data[4000];
-			pMsg->m_DataOut.StartWriting(data, sizeof(data));
-			int nCommands = 1 + nChokedCommands;
-			pMsg->m_nNewCommands = std::clamp(nCommands, 0, MAX_NEW_COMMANDS);
-			int nExtraCommands = nCommands - pMsg->m_nNewCommands;
-			pMsg->m_nBackupCommands = std::clamp(nExtraCommands, 2, MAX_BACKUP_COMMANDS);
-
-			bool bOk = true;
-			int nNumCmds = pMsg->m_nNewCommands + pMsg->m_nBackupCommands;
-			for (int nFrom = -1, nTo = nNextCommandNr - nNumCmds + 1; nTo <= nNextCommandNr; nTo++)
-			{
-				const bool bIsNewCmd = nTo >= nNextCommandNr - pMsg->m_nNewCommands + 1;
-				bOk = bOk && I::Client->WriteUsercmdDeltaToBuffer(&pMsg->m_DataOut, nFrom, nTo, bIsNewCmd);
-				nFrom = nTo;
-			}
-
-			if (bOk)
-			{
-				if (nExtraCommands > 0)
-					pNetChan->m_nChokedPackets -= nExtraCommands;
-
-				CALL_ORIGINAL(pNetChan, reinterpret_cast<INetMessage&>(*pMsg), bForceReliable, bVoice);
-			}
-		}
-
-		if (!F::Ticks.m_bSpeedhack)
-		{
-			const int iAllowedNewCommands = std::max(F::Ticks.m_iMaxUsrCmdProcessTicks - F::Ticks.m_iShiftedTicks, 0);
-			const int iCmdCount = pMsg->m_nNewCommands + pMsg->m_nBackupCommands - 3;
-			if (iCmdCount > iAllowedNewCommands)
-			{
-				SDK::Output("CLC_Move", std::format("{} sent ({} | {}), max was {}.", iCmdCount + 3, pMsg->m_nNewCommands, pMsg->m_nBackupCommands, iAllowedNewCommands).c_str(), { 255, 0, 0, 255 });
-				F::Ticks.m_iDeficit = iCmdCount - iAllowedNewCommands;
-			}
-		}
-
-		return true;
-	}
 	case clc_VoiceData:
+	{
 		// stop lag with voice chat
 		bVoice = true;
 		break;
+	}
 	}
 
 	return CALL_ORIGINAL(pNetChan, msg, bForceReliable, bVoice);

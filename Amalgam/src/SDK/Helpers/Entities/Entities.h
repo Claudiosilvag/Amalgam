@@ -2,15 +2,18 @@
 #include "../../../Utils/Macros/Macros.h"
 #include "../../Definitions/Classes.h"
 #include "../../Vars.h"
+#include <array>
 
 Enum(Entity,
 	PlayerAll, PlayerEnemy, PlayerTeam,
 	BuildingAll, BuildingEnemy, BuildingTeam,
-	/*PickupHealth, PickupAmmo, PickupMoney, PickupPowerup, PickupSpellbook, PickupGargoyle,*/
-	WorldProjectile,  WorldNPC, WorldBomb, /*WorldObjective,*/
+	PickupHealth, PickupAmmo, PickupMoney, /*PickupPowerup, PickupSpellbook, PickupGargoyle,*/
+	WorldProjectile,  WorldNPC, WorldBomb, WorldObjective,
 	LocalStickies, LocalFlares, SniperDots,
 	Invalid, GroupsMax
 )
+
+Enum(PriorityType, Relationship, Follow, Vote, Count)
 
 struct DormantData
 {
@@ -27,11 +30,16 @@ struct VelFixRecord
 class CEntities
 {
 private:
-	bool ManageDormancy(CBaseEntity* pEntity);
+	bool ManageDormancy(int nIndex, CBaseEntity* pEntity);
+	bool UpdatePlayerDetails(int nIndex, CTFPlayer* pPlayer, int iLag);
+	void UpdatePartyAndLobbyInfo(int nLocalIndex);
+	void UpdatePlayerAnimations(int nLocalIndex);
 
 	CTFPlayer* m_pLocal = nullptr;
 	CTFWeaponBase* m_pLocalWeapon = nullptr;
+	CSniperDot* m_pLocalLaserDot = nullptr;
 	CTFPlayerResource* m_pPlayerResource = nullptr;
+	CBaseTeamObjectiveResource* m_pObjectiveResource = nullptr;
 
 	std::array<std::vector<CBaseEntity*>, EntityEnum::GroupsMax> m_aGroups = {};
 
@@ -43,8 +51,8 @@ private:
 	std::array<std::deque<VelFixRecord>, MAX_PLAYERS> m_aOrigins = {};
 	std::array<uint32_t, MAX_EDICTS> m_aModels = {};
 
-	std::unordered_map<int, int> m_mIPriorities = {};
-	std::unordered_map<uint32_t, int> m_mUPriorities = {};
+	std::array<std::unordered_map<int, int>, PriorityTypeEnum::Count> m_aIPriorities = {};
+	std::array<std::unordered_map<uint32_t, int>, PriorityTypeEnum::Count> m_aUPriorities = {};
 	std::unordered_map<int, bool> m_mIFriends = {};
 	std::unordered_map<uint32_t, bool> m_mUFriends = {};
 	std::unordered_map<int, int> m_mIParty = {};
@@ -55,6 +63,7 @@ private:
 	std::unordered_map<uint32_t, int> m_mULevels = {};
 	uint32_t m_uAccountID;
 	int m_iPartyCount = 0;
+	bool m_bIsSpectated = false;
 
 public:
 	void Store();
@@ -68,7 +77,9 @@ public:
 
 	CTFPlayer* GetLocal();
 	CTFWeaponBase* GetWeapon();
+	CSniperDot* GetLaserDot();
 	CTFPlayerResource* GetResource();
+	CBaseTeamObjectiveResource* GetObjectiveResource();
 
 	const std::vector<CBaseEntity*>& GetGroup(uint8_t iGroup);
 
@@ -85,8 +96,8 @@ public:
 	uint32_t GetModel(unsigned short iIndex);
 	DormantData* GetDormancy(unsigned short iIndex);
 
-	int GetPriority(int iIndex);
-	int GetPriority(uint32_t uAccountID);
+	int GetPriority(int iIndex, PriorityTypeEnum::PriorityTypeEnum eType = PriorityTypeEnum::Relationship);
+	int GetPriority(uint32_t uAccountID, PriorityTypeEnum::PriorityTypeEnum eType = PriorityTypeEnum::Relationship);
 	bool IsFriend(int iIndex);
 	bool IsFriend(uint32_t uAccountID);
 	bool InParty(int iIndex);
@@ -98,6 +109,8 @@ public:
 	int GetParty(int iIndex);
 	int GetParty(uint32_t uAccountID);
 	int GetPartyCount();
+	uint32_t GetLocalAccountID();
+	bool IsSpectated();
 };
 
 ADD_FEATURE_CUSTOM(CEntities, Entities, H);

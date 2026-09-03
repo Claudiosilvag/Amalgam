@@ -7,9 +7,11 @@ MAKE_HOOK(CViewRender_RenderView, U::Memory.GetVirtual(I::ViewRender, 6), void,
 {
 	DEBUG_RETURN(CViewRender_RenderView, rcx, view, nClearFlags, whatToDraw);
 
+#ifndef TEXTMODE
 	CALL_ORIGINAL(rcx, view, nClearFlags, whatToDraw);
 	if (SDK::CleanScreenshot() || G::Unload)
 		return;
 
 	F::CameraWindow.RenderView(rcx, view);
+#endif
 }

@@ -8,21 +8,37 @@
 #include "../Features/CheatDetection/CheatDetection.h"
 #include "../Features/Resolver/Resolver.h"
 #include "../Features/Spectate/Spectate.h"
+#include "../Features/NavBot/NavEngine/Controllers/Controller.h"
+#include "../Features/NavBot/NavBotCore.h"
+#include "../Features/NavBot/NavEngine/NavEngine.h"
+#include "../Features/Killstreak/Killstreak.h"
+#include "../Features/FollowBot/FollowBot.h"
+#include "../Features/Aimbot/AimbotProjectile/AimbotProjectile.h"
 
 MAKE_HOOK(CViewRender_LevelInit, U::Memory.GetVirtual(I::ViewRender, 1), void,
 	void* rcx)
 {
 	DEBUG_RETURN(CViewRender_LevelInit, rcx);
 
+	CALL_ORIGINAL(rcx);
+
+#ifndef TEXTMODE
 	F::Materials.ReloadMaterials();
 	F::Visuals.OverrideWorldTextures();
+	F::Killstreak.Reset();
+	F::Spectate.Reset();
+#endif
 
 	F::Backtrack.Reset();
 	F::Ticks.Reset();
 	F::NoSpreadHitscan.Reset();
 	F::CheatDetection.Reset();
 	F::Resolver.Reset();
-	F::Spectate.Reset();
+	F::GameObjectiveController.Reset();
+	F::NavEngine.Reset();
+	F::NavBotCore.Reset();
+	F::BotUtils.Reset();
+	F::FollowBot.Reset();
 
-	CALL_ORIGINAL(rcx);
+	G::WranglerSecondFireTime = F::AimbotProjectile.m_flAimAnglesSetTime = 0.f;
 }

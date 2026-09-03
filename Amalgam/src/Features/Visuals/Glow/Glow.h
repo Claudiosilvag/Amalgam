@@ -15,8 +15,8 @@ private:
 
 	void DrawModel(CBaseEntity* pEntity);
 
-	void RenderBacktrack(const DrawModelState_t& pState, const ModelRenderInfo_t& pInfo);
-	void RenderFakeAngle(const DrawModelState_t& pState, const ModelRenderInfo_t& pInfo);
+	void RenderBacktrack(IVModelRender* pModelRender, const DrawModelState_t& pState, const ModelRenderInfo_t& pInfo);
+	void RenderFakeAngle(IVModelRender* pModelRender, const DrawModelState_t& pState, const ModelRenderInfo_t& pInfo);
 
 	IMaterial* m_pMatGlowColor;
 	ITexture* m_pRenderBuffer1;
@@ -24,9 +24,6 @@ private:
 	IMaterial* m_pMatHaloAddToScreen;
 	IMaterial* m_pMatBlurX;
 	IMaterial* m_pMatBlurY;
-	IMaterialVar* m_pBloomAmount;
-
-
 
 	struct GlowHasher_t
 	{
@@ -43,7 +40,7 @@ private:
 	struct GlowInfo_t
 	{
 		CBaseEntity* m_pEntity;
-		Color_t m_cColor;
+		Color_t m_tColor;
 		int m_iFlags = 0;
 	};
 	std::unordered_map<Glow_t, std::vector<GlowInfo_t>, GlowHasher_t> m_mEntities = {};
@@ -54,16 +51,15 @@ private:
 	OverrideType_t m_iOriginalOverride = OVERRIDE_NORMAL;
 
 	int m_iFlags = false;
-
 public:
 
 	void Store(CTFPlayer* pLocal);
 	void RenderFirst();
 	void RenderSecond();
-	void RenderHandler(const DrawModelState_t& pState, const ModelRenderInfo_t& pInfo, matrix3x4* pBoneToWorld);
+	void RenderHandler(IVModelRender* pModelRender, const DrawModelState_t& pState, const ModelRenderInfo_t& pInfo, matrix3x4* pBoneToWorld);
 
-	void RenderViewmodel(void* rcx, int flags);
-	void RenderViewmodel(const DrawModelState_t& pState, const ModelRenderInfo_t& pInfo, matrix3x4* pBoneToWorld);
+	void RenderViewmodel(CBaseAnimating* rcx, int flags);
+	void RenderViewmodel(IVModelRender* pModelRender, const DrawModelState_t& pState, const ModelRenderInfo_t& pInfo, matrix3x4* pBoneToWorld);
 
 	void Initialize();
 	void Unload();

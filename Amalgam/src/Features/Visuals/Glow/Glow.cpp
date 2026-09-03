@@ -5,6 +5,20 @@
 #include "../FakeAngle/FakeAngle.h"
 #include "../../Backtrack/Backtrack.h"
 
+static inline bool GetDistanceThing(float flDistance, const Glow_t& tGlow, Color_t& tColorOut)
+{
+	if (flDistance < tGlow.Start || flDistance > tGlow.End)
+		return false;
+
+	if (tGlow.SmoothAlpha)
+	{
+		tColorOut.a = Math::RemapVal(flDistance, tGlow.End - 256.f, tGlow.End, tColorOut.a, 0.f);
+		if (tGlow.Start)
+			tColorOut.a = Math::RemapVal(flDistance, tGlow.Start + 256.f, tGlow.Start, tColorOut.a, 0.f);
+	}
+	return tColorOut.a;
+}
+
 void CGlow::Begin()
 {
 	m_tOriginalColor = I::RenderView->GetColorModulation();
@@ -58,7 +72,8 @@ void CGlow::SecondEnd(Glow_t tGlow, IMatRenderContext* pRenderContext, int w, in
 
 	if (tGlow.Blur)
 	{
-		m_pBloomAmount->SetFloatValue(tGlow.Blur);
+		if (auto pBloomAmount = m_pMatBlurY ? m_pMatBlurY->FindVar("$bloomamount", nullptr) : nullptr)
+			pBloomAmount->SetFloatValue(tGlow.Blur);
 
 		pRenderContext->PushRenderTargetAndViewport();
 		{
@@ -129,17 +144,28 @@ void CGlow::Store(CTFPlayer* pLocal)
 	if (!pLocal || !F::Groups.GroupsActive())
 		return;
 
+	Vector vLocalOrigin = pLocal->m_vecOrigin();
+	int iLocalTeam = pLocal->m_iTeamNum();
 	for (auto& [pEntity, pGroup] : F::Groups.GetGroup())
 	{
 		if (pEntity->IsDormant() || !pEntity->ShouldDraw())
 			continue;
 
+		Vector vEntOrigin = pEntity->m_vecOrigin();
+		bool bWearableOrViewmodel = pEntity->IsBaseCombatWeapon() || pEntity->IsWearable();
+		if (bWearableOrViewmodel && pEntity->m_hOwnerEntity().Get())
+			vEntOrigin = pEntity->m_hOwnerEntity().Get()->m_vecOrigin();
+
+		float flDistance = vLocalOrigin.DistTo(vEntOrigin);
+
 		Color_t tColor = F::Groups.GetColor(pEntity, pGroup);
+		Color_t tBacktrackColor = tColor;
 		if (pGroup->m_tGlow() && !pEntity->IsWearableVM()
-			&& SDK::IsOnScreen(pEntity, pEntity->IsBaseCombatWeapon() || pEntity->IsWearable()))
+			&& GetDistanceThing(flDistance, pGroup->m_tGlow, tColor) && SDK::IsOnScreen(pEntity, pEntity->IsBaseCombatWeapon() || pEntity->IsWearable()))
 			m_mEntities[pGroup->m_tGlow].emplace_back(pEntity, tColor);
 
 		if (pEntity->IsPlayer() && pEntity != pLocal && pGroup->m_iBacktrack & BacktrackEnum::Enabled && pGroup->m_tBacktrackGlow()
+			&& GetDistanceThing(flDistance, pGroup->m_tBacktrackGlow, tBacktrackColor)
 			&& (F::Backtrack.GetFakeLatency() || F::Backtrack.GetFakeInterp() > G::Lerp || F::Backtrack.GetWindow()))
 		{
 			auto pWeapon = H::Entities.GetWeapon();
@@ -151,8 +177,9 @@ void CGlow::Store(CTFPlayer* pLocal)
 				else if (pWeapon->GetWeaponID() == TF_WEAPON_MEDIGUN)
 					bShowFriendly = true, bShowEnemy = false;
 
-				if (bShowEnemy && pEntity->m_iTeamNum() != pLocal->m_iTeamNum() || bShowFriendly && pEntity->m_iTeamNum() == pLocal->m_iTeamNum())
-					m_mEntities[pGroup->m_tBacktrackGlow].emplace_back(pEntity, tColor, pGroup->m_iBacktrack);
+				bool bIsTeammate = pEntity->m_iTeamNum() == iLocalTeam;
+				if (bShowEnemy && !bIsTeammate || bShowFriendly && bIsTeammate)
+					m_mEntities[pGroup->m_tBacktrackGlow].emplace_back(pEntity, tBacktrackColor, pGroup->m_iBacktrack);
 			}
 		}
 	}
@@ -169,7 +196,7 @@ void CGlow::RenderFirst()
 {
 	auto pRenderContext = I::MaterialSystem->GetRenderContext();
 	if (!pRenderContext || !m_pMatGlowColor || !m_pMatBlurX || !m_pMatBlurY || !m_pMatHaloAddToScreen)
-		return F::Materials.ReloadMaterials();
+		return;
 
 	FirstBegin(pRenderContext);
 	for (auto& [tGlow, vInfo] : m_mEntities)
@@ -188,7 +215,7 @@ void CGlow::RenderSecond()
 {
 	auto pRenderContext = I::MaterialSystem->GetRenderContext();
 	if (!pRenderContext || !m_pMatGlowColor || !m_pMatBlurX || !m_pMatBlurY || !m_pMatHaloAddToScreen)
-		return F::Materials.ReloadMaterials();
+		return;
 
 	const int w = H::Draw.m_nScreenW, h = H::Draw.m_nScreenH;
 	for (auto& [tGlow, vInfo] : m_mEntities)
@@ -196,8 +223,8 @@ void CGlow::RenderSecond()
 		SecondBegin(pRenderContext, w, h);
 		for (auto& tInfo : vInfo)
 		{
-			I::RenderView->SetColorModulation(tInfo.m_cColor);
-			I::RenderView->SetBlend(tInfo.m_cColor.a / 255.f);
+			I::RenderView->SetColorModulation(tInfo.m_tColor);
+			I::RenderView->SetBlend(tInfo.m_tColor.a / 255.f);
 
 			m_iFlags = tInfo.m_iFlags;
 			DrawModel(tInfo.m_pEntity);
@@ -207,15 +234,20 @@ void CGlow::RenderSecond()
 	}
 }
 
-void CGlow::RenderBacktrack(const DrawModelState_t& pState, const ModelRenderInfo_t& pInfo)
+void CGlow::RenderBacktrack(IVModelRender* pModelRender, const DrawModelState_t& pState, const ModelRenderInfo_t& pInfo)
 {
-	auto pEntity = I::ClientEntityList->GetClientEntity(pInfo.entity_index)->As<CTFPlayer>();
+	auto pEntityBase = I::ClientEntityList->GetClientEntity(pInfo.entity_index);
+	if (!pEntityBase)
+		return;
+
+	auto pEntity = pEntityBase->As<CTFPlayer>();
 	if (!pEntity || !pEntity->IsPlayer())
 		return;
 
 	std::vector<TickRecord*> vRecords = {};
 	if (!F::Backtrack.GetRecords(pEntity, vRecords))
 		return;
+
 	vRecords = F::Backtrack.GetValidRecords(vRecords);
 	if (!vRecords.size())
 		return;
@@ -223,21 +255,23 @@ void CGlow::RenderBacktrack(const DrawModelState_t& pState, const ModelRenderInf
 	bool bDrawLast = m_iFlags & BacktrackEnum::Last;
 	bool bDrawFirst = m_iFlags & BacktrackEnum::First;
 
-	//float flOriginalBlend = I::RenderView->GetBlend();
+	float flOriginalBlend = I::RenderView->GetBlend();
 	auto fDrawModel = [&](Vec3& vOrigin, const DrawModelState_t& pState, const ModelRenderInfo_t& pInfo, matrix3x4* pBoneToWorld, float flBlend)
 	{
 		if (!SDK::IsOnScreen(pEntity, vOrigin))
 			return;
 
-		//I::RenderView->SetBlend(flBlend * flOriginalBlend);
+		I::RenderView->SetBlend(flBlend * flOriginalBlend);
 		static auto IVModelRender_DrawModelExecute = U::Hooks.m_mHooks["IVModelRender_DrawModelExecute"];
-		IVModelRender_DrawModelExecute->Call<void>(I::ModelRender, pState, pInfo, pBoneToWorld);
+		IVModelRender_DrawModelExecute->As<DrawModelExecuteFn>()(pModelRender, pState, pInfo, pBoneToWorld);
 	};
+
+	Vector vEntityOrigin = pEntity->GetAbsOrigin();
 	if (!bDrawLast && !bDrawFirst)
 	{
 		for (auto pRecord : vRecords)
 		{
-			if (float flBlend = Math::RemapVal(pEntity->GetAbsOrigin().DistToSqr(pRecord->m_vOrigin), 1.f, 576.f, 0.f, 1.f))
+			if (float flBlend = Math::RemapVal(vEntityOrigin.DistToSqr(pRecord->m_vOrigin), 1.f, 576.f, 0.f, 1.f))
 				fDrawModel(pRecord->m_vOrigin, pState, pInfo, pRecord->m_aBones, flBlend);
 		}
 	}
@@ -246,50 +280,49 @@ void CGlow::RenderBacktrack(const DrawModelState_t& pState, const ModelRenderInf
 		if (bDrawLast)
 		{
 			auto pRecord = vRecords.back();
-			if (float flBlend = Math::RemapVal(pEntity->GetAbsOrigin().DistToSqr(pRecord->m_vOrigin), 1.f, 576.f, 0.f, 1.f))
+			if (float flBlend = Math::RemapVal(vEntityOrigin.DistToSqr(pRecord->m_vOrigin), 1.f, 576.f, 0.f, 1.f))
 				fDrawModel(pRecord->m_vOrigin, pState, pInfo, pRecord->m_aBones, flBlend);
 		}
 		if (bDrawFirst)
 		{
 			auto pRecord = vRecords.front();
-			if (float flBlend = Math::RemapVal(pEntity->GetAbsOrigin().DistToSqr(pRecord->m_vOrigin), 1.f, 576.f, 0.f, 1.f))
+			if (float flBlend = Math::RemapVal(vEntityOrigin.DistToSqr(pRecord->m_vOrigin), 1.f, 576.f, 0.f, 1.f))
 				fDrawModel(pRecord->m_vOrigin, pState, pInfo, pRecord->m_aBones, flBlend);
 		}
 	}
-	//I::RenderView->SetBlend(flOriginalBlend);
 }
-void CGlow::RenderFakeAngle(const DrawModelState_t& pState, const ModelRenderInfo_t& pInfo)
+void CGlow::RenderFakeAngle(IVModelRender* pModelRender, const DrawModelState_t& pState, const ModelRenderInfo_t& pInfo)
 {
 	static auto IVModelRender_DrawModelExecute = U::Hooks.m_mHooks["IVModelRender_DrawModelExecute"];
-	IVModelRender_DrawModelExecute->Call<void>(I::ModelRender, pState, pInfo, F::FakeAngle.aBones);
+	IVModelRender_DrawModelExecute->As<DrawModelExecuteFn>()(pModelRender, pState, pInfo, F::FakeAngle.aBones);
 }
-void CGlow::RenderHandler(const DrawModelState_t& pState, const ModelRenderInfo_t& pInfo, matrix3x4* pBoneToWorld)
+void CGlow::RenderHandler(IVModelRender* pModelRender, const DrawModelState_t& pState, const ModelRenderInfo_t& pInfo, matrix3x4* pBoneToWorld)
 {
 	if (!m_iFlags)
 	{
 		static auto IVModelRender_DrawModelExecute = U::Hooks.m_mHooks["IVModelRender_DrawModelExecute"];
-		IVModelRender_DrawModelExecute->Call<void>(I::ModelRender, pState, pInfo, pBoneToWorld);
+		IVModelRender_DrawModelExecute->As<DrawModelExecuteFn>()(pModelRender, pState, pInfo, pBoneToWorld);
 	}
 	else
 	{
 		if (pInfo.entity_index != I::EngineClient->GetLocalPlayer())
-			RenderBacktrack(pState, pInfo);
+			RenderBacktrack(pModelRender, pState, pInfo);
 		else
-			RenderFakeAngle(pState, pInfo);
+			RenderFakeAngle(pModelRender, pState, pInfo);
 	}
 }
 
-void CGlow::RenderViewmodel(void* rcx, int flags)
+void CGlow::RenderViewmodel(CBaseAnimating* rcx, int flags)
 {
 	if (!F::Groups.GroupsActive())
 		return;
 
 	auto pRenderContext = I::MaterialSystem->GetRenderContext();
 	if (!pRenderContext || !m_pMatGlowColor || !m_pMatBlurX || !m_pMatBlurY || !m_pMatHaloAddToScreen)
-		return F::Materials.ReloadMaterials();
+		return;
 
 	Group_t* pGroup = nullptr;
-	if (!F::Groups.GetGroup(reinterpret_cast<CBaseAnimating*>(rcx)->IsValid() ? TargetsEnum::ViewmodelHands : TargetsEnum::ViewmodelWeapon, pGroup) || !pGroup->m_tGlow())
+	if (!F::Groups.GetGroup(rcx->IsValid() ? TargetsEnum::ViewmodelHands : TargetsEnum::ViewmodelWeapon, pGroup) || !pGroup->m_tGlow())
 		return;
 
 	static auto CBaseAnimating_InternalDrawModel = U::Hooks.m_mHooks["CBaseAnimating_InternalDrawModel"];
@@ -298,23 +331,23 @@ void CGlow::RenderViewmodel(void* rcx, int flags)
 
 	pRenderContext->CullMode(MATERIAL_CULLMODE_CCW); // glow won't work properly with MATERIAL_CULLMODE_CW
 	FirstBegin(pRenderContext);
-	CBaseAnimating_InternalDrawModel->Call<int>(rcx, flags);
+	CBaseAnimating_InternalDrawModel->As<InternalDrawModelFn>()(rcx, flags);
 	FirstEnd(pRenderContext);
 	SecondBegin(pRenderContext, w, h);
 	I::RenderView->SetColorModulation(pGroup->m_tColor);
 	I::RenderView->SetBlend(pGroup->m_tColor.a / 255.f);
-	CBaseAnimating_InternalDrawModel->Call<int>(rcx, flags);
+	CBaseAnimating_InternalDrawModel->As<InternalDrawModelFn>()(rcx, flags);
 	SecondEnd(pGroup->m_tGlow, pRenderContext, w, h);
 	pRenderContext->CullMode(G::FlipViewmodels ? MATERIAL_CULLMODE_CW : MATERIAL_CULLMODE_CCW);
 }
-void CGlow::RenderViewmodel(const DrawModelState_t& pState, const ModelRenderInfo_t& pInfo, matrix3x4* pBoneToWorld)
+void CGlow::RenderViewmodel(IVModelRender* pModelRender, const DrawModelState_t& pState, const ModelRenderInfo_t& pInfo, matrix3x4* pBoneToWorld)
 {
 	if (!F::Groups.GroupsActive())
 		return;
 
 	auto pRenderContext = I::MaterialSystem->GetRenderContext();
 	if (!pRenderContext || !m_pMatGlowColor || !m_pMatBlurX || !m_pMatBlurY || !m_pMatHaloAddToScreen)
-		return F::Materials.ReloadMaterials();
+		return;
 
 	Group_t* pGroup = nullptr;
 	if (!F::Groups.GetGroup(TargetsEnum::ViewmodelWeapon, pGroup) || !pGroup->m_tGlow())
@@ -325,12 +358,12 @@ void CGlow::RenderViewmodel(const DrawModelState_t& pState, const ModelRenderInf
 	const int w = H::Draw.m_nScreenW, h = H::Draw.m_nScreenH;
 
 	FirstBegin(pRenderContext);
-	IVModelRender_DrawModelExecute->Call<void>(I::ModelRender, pState, pInfo, pBoneToWorld);
+	IVModelRender_DrawModelExecute->As<DrawModelExecuteFn>()(pModelRender, pState, pInfo, pBoneToWorld);
 	FirstEnd(pRenderContext);
 	SecondBegin(pRenderContext, w, h);
 	I::RenderView->SetColorModulation(pGroup->m_tColor);
 	I::RenderView->SetBlend(pGroup->m_tColor.a / 255.f);
-	IVModelRender_DrawModelExecute->Call<void>(I::ModelRender, pState, pInfo, pBoneToWorld);
+	IVModelRender_DrawModelExecute->As<DrawModelExecuteFn>()(pModelRender, pState, pInfo, pBoneToWorld);
 	SecondEnd(pGroup->m_tGlow, pRenderContext, w, h);
 }
 
@@ -340,17 +373,24 @@ void CGlow::Initialize()
 {
 	int nWidth, nHeight; I::MatSystemSurface->GetScreenSize(nWidth, nHeight);
 
-	if (!m_pMatGlowColor)
+	if (!m_pMatGlowColor || m_pMatGlowColor->IsErrorMaterial())
 	{
-		m_pMatGlowColor = I::MaterialSystem->FindMaterial("dev/glow_color", TEXTURE_GROUP_OTHER);
-		m_pMatGlowColor->IncrementReferenceCount();
-		F::Materials.m_mMatList[m_pMatGlowColor];
+		if (m_pMatGlowColor)
+			m_pMatGlowColor->DecrementReferenceCount();
+
+		m_pMatGlowColor = nullptr;
+		auto pMaterial = I::MaterialSystem->FindMaterial("dev/glow_color", TEXTURE_GROUP_OTHER);
+		if (pMaterial && !pMaterial->IsErrorMaterial())
+		{
+			m_pMatGlowColor = pMaterial;
+			m_pMatGlowColor->IncrementReferenceCount();
+		}
 	}
 
-	if (!m_pRenderBuffer1)
+	auto fCreateBuffer = [&](const char* sName, ITexture* pOld)
 	{
-		m_pRenderBuffer1 = I::MaterialSystem->CreateNamedRenderTargetTextureEx(
-			"RenderBuffer1",
+		auto pNew = I::MaterialSystem->CreateNamedRenderTargetTextureEx(
+			sName,
 			nWidth, nHeight,
 			RT_SIZE_LITERAL,
 			IMAGE_FORMAT_RGB888,
@@ -358,44 +398,39 @@ void CGlow::Initialize()
 			TEXTUREFLAGS_CLAMPS | TEXTUREFLAGS_CLAMPT | TEXTUREFLAGS_EIGHTBITALPHA,
 			CREATERENDERTARGETFLAGS_HDR
 		);
-		m_pRenderBuffer1->IncrementReferenceCount();
-	}
-
-	if (!m_pRenderBuffer2)
-	{
-		m_pRenderBuffer2 = I::MaterialSystem->CreateNamedRenderTargetTextureEx(
-			"RenderBuffer2",
-			nWidth, nHeight,
-			RT_SIZE_LITERAL,
-			IMAGE_FORMAT_RGB888,
-			MATERIAL_RT_DEPTH_SHARED,
-			TEXTUREFLAGS_CLAMPS | TEXTUREFLAGS_CLAMPT | TEXTUREFLAGS_EIGHTBITALPHA,
-			CREATERENDERTARGETFLAGS_HDR
-		);
-		m_pRenderBuffer2->IncrementReferenceCount();
-	}
+		if (pNew && pNew != pOld)
+			pNew->IncrementReferenceCount();
+		return pNew;
+	};
+	m_pRenderBuffer1 = fCreateBuffer("RenderBuffer1", m_pRenderBuffer1);
+	m_pRenderBuffer2 = fCreateBuffer("RenderBuffer2", m_pRenderBuffer2);
 
 	if (!m_pMatHaloAddToScreen)
 	{
-		KeyValues* kv = new KeyValues("UnlitGeneric");
-		kv->SetString("$basetexture", "RenderBuffer1");
-		kv->SetString("$additive", "1");
-		m_pMatHaloAddToScreen = F::Materials.Create("MatHaloAddToScreen", kv);
+		m_pMatHaloAddToScreen = F::Materials.create_from_vmt("MatHaloAddToScreen",
+			"\"UnlitGeneric\""
+			"\n{"
+			"\n\t$basetexture \"RenderBuffer1\""
+			"\n\t$additive \"1\""
+			"\n}");
 	}
 
 	if (!m_pMatBlurX)
 	{
-		KeyValues* kv = new KeyValues("BlurFilterX");
-		kv->SetString("$basetexture", "RenderBuffer1");
-		m_pMatBlurX = F::Materials.Create("MatBlurX", kv);
+		m_pMatBlurX = F::Materials.create_from_vmt("MatBlurX",
+			"\"BlurFilterX\""
+			"\n{"
+			"\n\t$basetexture \"RenderBuffer1\""
+			"\n}");
 	}
 
 	if (!m_pMatBlurY)
 	{
-		KeyValues* kv = new KeyValues("BlurFilterY");
-		kv->SetString("$basetexture", "RenderBuffer2");
-		m_pMatBlurY = F::Materials.Create("MatBlurY", kv);
-		m_pBloomAmount = m_pMatBlurY->FindVar("$bloomamount", nullptr);
+		m_pMatBlurY = F::Materials.create_from_vmt("MatBlurY",
+			"\"BlurFilterY\""
+			"\n{"
+			"\n\t$basetexture \"RenderBuffer2\""
+			"\n}");
 	}
 }
 
@@ -404,7 +439,6 @@ void CGlow::Unload()
 	if (m_pMatGlowColor)
 	{
 		m_pMatGlowColor->DecrementReferenceCount();
-		m_pMatGlowColor->DeleteIfUnreferenced();
 		m_pMatGlowColor = nullptr;
 	}
 

@@ -9,6 +9,7 @@ MAKE_HOOK(CTFBadgePanel_SetupBadge, S::CTFBadgePanel_SetupBadge(), void,
 {
 	DEBUG_RETURN(CTFBadgePanel_SetupBadge, rcx, pMatchDesc, levelInfo, steamID);
 
+#ifndef TEXTMODE
 	int nOldLevelNum = levelInfo.m_nLevelNum;
 
 	switch (F::PlayerUtils.GetNameType(steamID.GetAccountID()))
@@ -26,4 +27,5 @@ MAKE_HOOK(CTFBadgePanel_SetupBadge, S::CTFBadgePanel_SetupBadge(), void,
 	}
 
 	levelInfo.m_nLevelNum = nOldLevelNum;
+#endif
 }

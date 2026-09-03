@@ -9,7 +9,7 @@ MAKE_HOOK(CBaseAnimating_SetupBones, S::CBaseAnimating_SetupBones(), bool,
 {
 	DEBUG_RETURN(CBaseAnimating_SetupBones, rcx, pBoneToWorldOut, nMaxBones, boneMask, currentTime);
 
-	if (!Vars::Misc::Game::SetupBonesOptimization.Value || F::Backtrack.IsSettingUpBones())
+	if (!G::Unload && !Vars::Misc::Game::SetupBonesOptimization.Value || F::Backtrack.IsSettingUpBones())
 		return CALL_ORIGINAL(rcx, pBoneToWorldOut, nMaxBones, boneMask, currentTime);
 
 	auto pAnimating = reinterpret_cast<CBaseEntity*>(uintptr_t(rcx) - 8);

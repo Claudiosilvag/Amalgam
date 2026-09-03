@@ -4,16 +4,16 @@
 class CTicks
 {
 private:
+	void SendMoveFunc();
 	void MoveFunc(float accumulated_extra_samples, bool bFinalTick);
 	void MoveManage();
 
 	void Recharge(CTFPlayer* pLocal);
 	void Warp();
 	void Doubletap(CTFPlayer* pLocal, CUserCmd* pCmd);
-	void Speedhack();
 	bool ValidWeapon(CTFWeaponBase* pWeapon);
 
-	void ManagePacket(CUserCmd* pCmd, bool* pSendPacket);
+	void ManagePacket(CUserCmd* pCmd);
 
 	bool m_bGoalReached = true;
 	Vec3 m_vShootPos = {};
@@ -24,7 +24,7 @@ private:
 
 public:
 	void Move(float accumulated_extra_samples, bool bFinalTick);
-	void CreateMove(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd, bool* pSendPacket);
+	void CreateMove(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd);
 	void Draw(CTFPlayer* pLocal);
 	void Reset();
 
@@ -43,15 +43,15 @@ public:
 
 	void SaveShootPos(CTFPlayer* pLocal);
 	Vec3 GetShootPos();
-	void SaveShootAngle(CUserCmd* pCmd, bool bSendPacket);
+	void SaveShootAngle(CUserCmd* pCmd);
 	Vec3* GetShootAngle();
 	bool IsTimingUnsure();
 
 	bool m_bDoubletap = false;
 	bool m_bWarp = false;
 	bool m_bRecharge = false;
+	bool m_bRechargeQueue = false;
 	bool m_bAntiWarp = false;
-	bool m_bSpeedhack = false;
 
 	int m_iShiftedTicks = 0;
 	int m_iShiftedGoal = 0;

@@ -7,6 +7,7 @@ MAKE_HOOK(CClientModeShared_OverrideView, U::Memory.GetVirtual(I::ClientModeShar
 {
 	DEBUG_RETURN(CClientModeShared_OverrideView, rcx, pView);
 
+#ifndef TEXTMODE
 	CALL_ORIGINAL(rcx, pView);
 
 	if (auto pLocal = H::Entities.GetLocal(); pLocal && pView)
@@ -14,4 +15,5 @@ MAKE_HOOK(CClientModeShared_OverrideView, U::Memory.GetVirtual(I::ClientModeShar
 		F::Visuals.FOV(pLocal, pView);
 		F::Visuals.ThirdPerson(pLocal, pView);
 	}
+#endif
 }

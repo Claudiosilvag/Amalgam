@@ -1661,6 +1661,7 @@ enum
 	TF_CLASS_DEMOMAN,
 	TF_CLASS_MEDIC,
 	TF_CLASS_HEAVY,
+	TF_CLASS_HEAVYWEAPONS = TF_CLASS_HEAVY,
 	TF_CLASS_PYRO,
 	TF_CLASS_SPY,
 	TF_CLASS_ENGINEER,
@@ -2401,7 +2402,9 @@ enum EWeaponSlot
 {
 	SLOT_PRIMARY,
 	SLOT_SECONDARY,
-	SLOT_MELEE
+	SLOT_MELEE,
+	SLOT_PDA1,
+	SLOT_PDA2
 };
 
 enum ProjectileType_t
@@ -3165,4 +3168,57 @@ struct StartSoundParams_t
 	int				speakerentity;
 	bool			suppressrecording;
 	int				initialStreamPosition;
+};
+
+class CParticleSubTexture;
+struct Particle
+{
+	Particle *m_pPrev, *m_pNext;
+
+	// Which sub texture this particle uses (so we can get at the tcoord mins and maxs).
+	CParticleSubTexture *m_pSubTexture;
+
+	// If m_Pos isn't used to store the world position, then implement IParticleEffect::GetParticlePosition()
+	Vector m_Pos;			// Position of the particle in world space
+};
+
+class SimpleParticle : public Particle
+{
+public:
+	SimpleParticle() : m_iFlags(0) {}
+
+	// AddSimpleParticle automatically initializes these fields.
+	Vector		m_vecVelocity;
+	float		m_flRoll;
+	float		m_flDieTime;	// How long it lives for.
+	float		m_flLifetime;	// How long it has been alive for so far.
+	unsigned char	m_uchColor[3];
+	unsigned char	m_uchStartAlpha;
+	unsigned char	m_uchEndAlpha;
+	unsigned char	m_uchStartSize;
+	unsigned char	m_uchEndSize;
+	unsigned char 	m_iFlags;
+	float		m_flRollDelta;
+};
+
+// Crafting slots on crafting page
+#define CRAFTING_SLOTS_INPUT_ROWS					3
+#define CRAFTING_SLOTS_INPUT_COLUMNS				4
+#define CRAFTING_SLOTS_INPUTPANELS					(CRAFTING_SLOTS_INPUT_ROWS * CRAFTING_SLOTS_INPUT_COLUMNS)
+
+class CCraftingPanel
+{
+public:
+	// Not sure if the paddings are correct
+    byte pad0[808];
+    // Items in the input model panels
+    unsigned long long m_InputItems[CRAFTING_SLOTS_INPUTPANELS];
+    const int *m_ItemPanelCriteria[CRAFTING_SLOTS_INPUTPANELS];
+
+    byte pad1[128];
+    int m_iCurrentlySelectedRecipe;
+
+    byte pad2[68];
+
+    int m_iCraftingAttempts;
 };

@@ -1,11 +1,19 @@
 #pragma once
 #include "../../SDK/SDK.h"
+#include <optional>
 
 struct Sequence_t
 {
 	int m_nInReliableState;
 	int m_nSequenceNr;
 	float m_flTime;
+};
+
+struct HitboxInfo_t
+{
+	int m_iBone = -1, m_nHitbox = -1;
+	Vec3 m_vCenter = {};
+	Vec3 m_vMin = {}, m_vMax = {};
 };
 
 struct TickRecord
@@ -36,15 +44,13 @@ private:
 	int m_nLastInSequenceNr = 0;
 	int m_nOldTickBase = 0;
 	float m_flMaxUnlag = 1.f;
-
 	float m_flFakeLatency = 0.f;
 	float m_flFakeInterp = 0.015f;
 
 	bool m_bSettingUpBones = false;
-
 public:
 	void Store();
-	void CreateMove(CUserCmd* pCmd);
+	void CreateMove(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd);
 	void SendLerp();
 	void Draw(CTFPlayer* pLocal);
 	void Reset();
@@ -66,6 +72,7 @@ public:
 	void ReportShot(int iIndex);
 	void AdjustPing(CNetChannel* netChannel);
 	void RestorePing(CNetChannel* netChannel);
+
 
 	bool IsSettingUpBones() { return m_bSettingUpBones; }
 

@@ -1,3 +1,4 @@
+#ifndef TEXTMODE
 #include "../SDK/SDK.h"
 
 #include "../Features/Spectate/Spectate.h"
@@ -56,3 +57,4 @@ MAKE_HOOK(CHLTVCamera_GetMode, S::CHLTVCamera_GetMode(), int,
 
 	return CALL_ORIGINAL(rcx);
 }
+#endif

@@ -5,12 +5,10 @@
 DWORD WINAPI MainThread(LPVOID lpParam)
 {
 	U::ExceptionHandler.Initialize(lpParam);
-
 	U::Core.Load();
 	U::Core.Loop();
-	U::Core.Unload();
-
 	U::ExceptionHandler.Unload();
+	U::Core.Unload();
 
 	FreeLibraryAndExitThread(static_cast<HMODULE>(lpParam), EXIT_SUCCESS);
 }

@@ -1,3 +1,4 @@
+#ifndef TEXTMODE
 #include "../SDK/SDK.h"
 
 #include "../Features/Visuals/Materials/Materials.h"
@@ -12,3 +13,4 @@ MAKE_HOOK(IMatSystemSurface_OnScreenSizeChanged, U::Memory.GetVirtual(I::MatSyst
 	H::Fonts.Reload();
 	F::Materials.ReloadMaterials();
 }
+#endif

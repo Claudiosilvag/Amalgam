@@ -35,8 +35,12 @@ public:
 	ImFont* FontMono = nullptr;
 
 	ImFont* IconFont = nullptr;
-
 	bool m_bLoaded = false;
+	
+	IDirect3DDevice9* GetDevice() const { return m_pDevice; }
+
+private:
+	IDirect3DDevice9* m_pDevice = nullptr;
 };
 
 ADD_FEATURE(CRender, Render);

@@ -80,6 +80,8 @@ public:
 	void String(const Font_t& tFont, int x, int y, Color_t tColor, EAlign eAlign, const wchar_t* wstr);
 	void StringOutlined(const Font_t& tFont, int x, int y, Color_t tColor, Color_t tColorOut, EAlign eAlign, const char* str);
 	void StringOutlined(const Font_t& tFont, int x, int y, Color_t tColor, Color_t tColorOut, EAlign eAlign, const wchar_t* wstr);
+	void StringWithBackground(const Font_t& tFont, int x, int y, Color_t tColor, Color_t tColorBg, EAlign eAlign, const char* str);
+	void StringWithBackground(const Font_t& tFont, int x, int y, Color_t tColor, Color_t tColorBg, EAlign eAlign, const wchar_t* wstr);
 
 	void Line(int x1, int y1, int x2, int y2, Color_t tColor);
 	void FillPolygon(std::vector<Vertex_t> vVertices, Color_t tColor);

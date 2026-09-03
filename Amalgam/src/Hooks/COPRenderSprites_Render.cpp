@@ -71,100 +71,103 @@ struct ParticleRenderData_t
 };
 
 MAKE_HOOK(COPRenderSprites_Render, S::COPRenderSprites_Render(), void,
-    void* rcx, IMatRenderContext* pRenderContext, CParticleCollection* pParticles, void* pContext)
-{
-    DEBUG_RETURN(COPRenderSprites_Render, rcx, pRenderContext, pParticles, pContext);
+		  void* rcx, IMatRenderContext* pRenderContext, CParticleCollection* pParticles, void* pContext)
+{ 
+	DEBUG_RETURN(COPRenderSprites_Render, rcx, pRenderContext, pParticles, pContext);
 
+#ifndef TEXTMODE
     if (!Vars::Visuals::Effects::DrawIconsThroughWalls.Value || SDK::CleanScreenshot())
         return CALL_ORIGINAL(rcx, pRenderContext, pParticles, pContext);
 
-    bool bValid = false;
-    switch (FNV1A::Hash32(pParticles->m_pDef->m_pszMaterialName))
-    {
-    // blue icons
-    case FNV1A::Hash32Const("effects\\defense_buff_bullet_blue.vmt"):
-    case FNV1A::Hash32Const("effects\\defense_buff_explosion_blue.vmt"):
-    case FNV1A::Hash32Const("effects\\defense_buff_fire_blue.vmt"):
-    case FNV1A::Hash32Const("effects\\powerup_agility_icon_blue.vmt"):
-    case FNV1A::Hash32Const("effects\\powerup_haste_icon_blue.vmt"):
-    case FNV1A::Hash32Const("effects\\powerup_king_icon_blue.vmt"):
-    case FNV1A::Hash32Const("effects\\powerup_knockout_icon_blue.vmt"):
-    case FNV1A::Hash32Const("effects\\powerup_plague_icon_blue.vmt"):
-    case FNV1A::Hash32Const("effects\\powerup_precision_icon_blue.vmt"):
-    case FNV1A::Hash32Const("effects\\powerup_reflect_icon_blue.vmt"):
-    case FNV1A::Hash32Const("effects\\powerup_resist_icon_blue.vmt"):
-    case FNV1A::Hash32Const("effects\\powerup_strength_icon_blue.vmt"):
-    case FNV1A::Hash32Const("effects\\powerup_supernova_icon_blue.vmt"):
-    case FNV1A::Hash32Const("effects\\powerup_thorns_icon_blue.vmt"):
-    case FNV1A::Hash32Const("effects\\powerup_vampire_icon_blue.vmt"):
-    {
-        auto pLocal = H::Entities.GetLocal();
-        bValid = !pLocal || pLocal->m_iTeamNum() != TF_TEAM_BLUE;
-        break;
-    }
-    // red icons
-    case FNV1A::Hash32Const("effects\\defense_buff_bullet_red.vmt"):
-    case FNV1A::Hash32Const("effects\\defense_buff_explosion_red.vmt"):
-    case FNV1A::Hash32Const("effects\\defense_buff_fire_red.vmt"):
-    case FNV1A::Hash32Const("effects\\powerup_agility_icon_red.vmt"):
-    case FNV1A::Hash32Const("effects\\powerup_haste_icon_red.vmt"):
-    case FNV1A::Hash32Const("effects\\powerup_king_icon_red.vmt"):
-    case FNV1A::Hash32Const("effects\\powerup_knockout_icon_red.vmt"):
-    case FNV1A::Hash32Const("effects\\powerup_plague_icon_red.vmt"):
-    case FNV1A::Hash32Const("effects\\powerup_precision_icon_red.vmt"):
-    case FNV1A::Hash32Const("effects\\powerup_reflect_icon_red.vmt"):
-    case FNV1A::Hash32Const("effects\\powerup_regen_icon_blue.vmt"):
-    case FNV1A::Hash32Const("effects\\powerup_regen_icon_red.vmt"):
-    case FNV1A::Hash32Const("effects\\powerup_resist_icon_red.vmt"):
-    case FNV1A::Hash32Const("effects\\powerup_strength_icon_red.vmt"):
-    case FNV1A::Hash32Const("effects\\powerup_supernova_icon_red.vmt"):
-    case FNV1A::Hash32Const("effects\\powerup_thorns_icon_red.vmt"):
-    case FNV1A::Hash32Const("effects\\powerup_vampire_icon_red.vmt"):
-    {
-        auto pLocal = H::Entities.GetLocal();
-        bValid = !pLocal || pLocal->m_iTeamNum() != TF_TEAM_RED;
-        break;
-    }
-    // global icons
-    /*
-    case FNV1A::Hash32Const("effects\\powerup_agility_icon.vmt"):
-    case FNV1A::Hash32Const("effects\\powerup_haste_icon.vmt"):
-    case FNV1A::Hash32Const("effects\\powerup_king_icon.vmt"):
-    case FNV1A::Hash32Const("effects\\powerup_knockout_icon.vmt"):
-    case FNV1A::Hash32Const("effects\\powerup_pestilence_icon.vmt"): // is this even used?
-    case FNV1A::Hash32Const("effects\\powerup_plague_icon.vmt"):
-    case FNV1A::Hash32Const("effects\\powerup_precision_icon.vmt"):
-    case FNV1A::Hash32Const("effects\\powerup_reflect_icon.vmt"):
-    case FNV1A::Hash32Const("effects\\powerup_regen_icon.vmt"):
-    case FNV1A::Hash32Const("effects\\powerup_resist_icon.vmt"):
-    case FNV1A::Hash32Const("effects\\powerup_strength_icon.vmt"):
-    case FNV1A::Hash32Const("effects\\powerup_supernova_icon.vmt"):
-    case FNV1A::Hash32Const("effects\\powerup_thorns_icon.vmt"):
-    case FNV1A::Hash32Const("effects\\powerup_vampire_icon.vmt"):
-    */
-    case FNV1A::Hash32Const("effects\\particle_nemesis_blue.vmt"):
-    case FNV1A::Hash32Const("effects\\particle_nemesis_red.vmt"):
-    case FNV1A::Hash32Const("effects\\particle_nemesis_burst.vmt"):
-    case FNV1A::Hash32Const("effects\\duel_blue.vmt"):
-    case FNV1A::Hash32Const("effects\\duel_red.vmt"):
-    case FNV1A::Hash32Const("effects\\duel_burst.vmt"):
-    case FNV1A::Hash32Const("effects\\crit.vmt"):
-    case FNV1A::Hash32Const("effects\\yikes.vmt"):
-        bValid = true;
-    }
-    if (!bValid)
-        return CALL_ORIGINAL(rcx, pRenderContext, pParticles, pContext);
+	bool bValid = false;
+	switch (FNV1A::Hash32(pParticles->m_pDef->m_pszMaterialName))
+	{
+		// blue icons
+	case FNV1A::Hash32Const("effects\\defense_buff_bullet_blue.vmt"):
+	case FNV1A::Hash32Const("effects\\defense_buff_explosion_blue.vmt"):
+	case FNV1A::Hash32Const("effects\\defense_buff_fire_blue.vmt"):
+	case FNV1A::Hash32Const("effects\\powerup_agility_icon_blue.vmt"):
+	case FNV1A::Hash32Const("effects\\powerup_haste_icon_blue.vmt"):
+	case FNV1A::Hash32Const("effects\\powerup_king_icon_blue.vmt"):
+	case FNV1A::Hash32Const("effects\\powerup_knockout_icon_blue.vmt"):
+	case FNV1A::Hash32Const("effects\\powerup_plague_icon_blue.vmt"):
+	case FNV1A::Hash32Const("effects\\powerup_precision_icon_blue.vmt"):
+	case FNV1A::Hash32Const("effects\\powerup_reflect_icon_blue.vmt"):
+	case FNV1A::Hash32Const("effects\\powerup_resist_icon_blue.vmt"):
+	case FNV1A::Hash32Const("effects\\powerup_strength_icon_blue.vmt"):
+	case FNV1A::Hash32Const("effects\\powerup_supernova_icon_blue.vmt"):
+	case FNV1A::Hash32Const("effects\\powerup_thorns_icon_blue.vmt"):
+	case FNV1A::Hash32Const("effects\\powerup_vampire_icon_blue.vmt"):
+	{
+		auto pLocal = H::Entities.GetLocal();
+		bValid = !pLocal || pLocal->m_iTeamNum() != TF_TEAM_BLUE;
+		break;
+	}
+	// red icons
+	case FNV1A::Hash32Const("effects\\defense_buff_bullet_red.vmt"):
+	case FNV1A::Hash32Const("effects\\defense_buff_explosion_red.vmt"):
+	case FNV1A::Hash32Const("effects\\defense_buff_fire_red.vmt"):
+	case FNV1A::Hash32Const("effects\\powerup_agility_icon_red.vmt"):
+	case FNV1A::Hash32Const("effects\\powerup_haste_icon_red.vmt"):
+	case FNV1A::Hash32Const("effects\\powerup_king_icon_red.vmt"):
+	case FNV1A::Hash32Const("effects\\powerup_knockout_icon_red.vmt"):
+	case FNV1A::Hash32Const("effects\\powerup_plague_icon_red.vmt"):
+	case FNV1A::Hash32Const("effects\\powerup_precision_icon_red.vmt"):
+	case FNV1A::Hash32Const("effects\\powerup_reflect_icon_red.vmt"):
+	case FNV1A::Hash32Const("effects\\powerup_regen_icon_blue.vmt"):
+	case FNV1A::Hash32Const("effects\\powerup_regen_icon_red.vmt"):
+	case FNV1A::Hash32Const("effects\\powerup_resist_icon_red.vmt"):
+	case FNV1A::Hash32Const("effects\\powerup_strength_icon_red.vmt"):
+	case FNV1A::Hash32Const("effects\\powerup_supernova_icon_red.vmt"):
+	case FNV1A::Hash32Const("effects\\powerup_thorns_icon_red.vmt"):
+	case FNV1A::Hash32Const("effects\\powerup_vampire_icon_red.vmt"):
+	{
+		auto pLocal = H::Entities.GetLocal();
+		bValid = !pLocal || pLocal->m_iTeamNum() != TF_TEAM_RED;
+		break;
+	}
+	// global icons
+	/*
+	case FNV1A::Hash32Const("effects\\powerup_agility_icon.vmt"):
+	case FNV1A::Hash32Const("effects\\powerup_haste_icon.vmt"):
+	case FNV1A::Hash32Const("effects\\powerup_king_icon.vmt"):
+	case FNV1A::Hash32Const("effects\\powerup_knockout_icon.vmt"):
+	case FNV1A::Hash32Const("effects\\powerup_pestilence_icon.vmt"): // is this even used?
+	case FNV1A::Hash32Const("effects\\powerup_plague_icon.vmt"):
+	case FNV1A::Hash32Const("effects\\powerup_precision_icon.vmt"):
+	case FNV1A::Hash32Const("effects\\powerup_reflect_icon.vmt"):
+	case FNV1A::Hash32Const("effects\\powerup_regen_icon.vmt"):
+	case FNV1A::Hash32Const("effects\\powerup_resist_icon.vmt"):
+	case FNV1A::Hash32Const("effects\\powerup_strength_icon.vmt"):
+	case FNV1A::Hash32Const("effects\\powerup_supernova_icon.vmt"):
+	case FNV1A::Hash32Const("effects\\powerup_thorns_icon.vmt"):
+	case FNV1A::Hash32Const("effects\\powerup_vampire_icon.vmt"):
+	*/
+	case FNV1A::Hash32Const("effects\\particle_nemesis_blue.vmt"):
+	case FNV1A::Hash32Const("effects\\particle_nemesis_red.vmt"):
+	case FNV1A::Hash32Const("effects\\particle_nemesis_burst.vmt"):
+	case FNV1A::Hash32Const("effects\\duel_blue.vmt"):
+	case FNV1A::Hash32Const("effects\\duel_red.vmt"):
+	case FNV1A::Hash32Const("effects\\duel_burst.vmt"):
+	case FNV1A::Hash32Const("effects\\crit.vmt"):
+	case FNV1A::Hash32Const("effects\\yikes.vmt"):
+		bValid = true;
+	}
+	if (!bValid)
+		return CALL_ORIGINAL(rcx, pRenderContext, pParticles, pContext);
 
-    pRenderContext->DepthRange(0.f, 0.2f);
-    CALL_ORIGINAL(rcx, pRenderContext, pParticles, pContext);
-    pRenderContext->DepthRange(0.f, 1.f);
+	pRenderContext->DepthRange(0.f, 0.2f);
+	CALL_ORIGINAL(rcx, pRenderContext, pParticles, pContext);
+	pRenderContext->DepthRange(0.f, 1.f);
+#endif
 }
 
 MAKE_HOOK(COPRenderSprites_RenderSpriteCard, S::COPRenderSprites_RenderSpriteCard(), void,
     void* rcx, void* meshBuilder, void* pCtx, SpriteRenderInfo_t& info, int hParticle, ParticleRenderData_t* pSortList, void* pCamera)
-{
-    DEBUG_RETURN(COPRenderSprites_RenderSpriteCard, rcx, meshBuilder, pCtx, info, hParticle, pSortList, pCamera);
-
+{ 
+	DEBUG_RETURN(COPRenderSprites_RenderSpriteCard, rcx, meshBuilder, pCtx, info, hParticle, pSortList, pCamera);
+	
+#ifndef TEXTMODE
     if (!(Vars::Visuals::World::Modulations.Value & Vars::Visuals::World::ModulationsEnum::Particle) || SDK::CleanScreenshot())
         return CALL_ORIGINAL(rcx, meshBuilder, pCtx, info, hParticle, pSortList, pCamera);
 
@@ -174,13 +177,15 @@ MAKE_HOOK(COPRenderSprites_RenderSpriteCard, S::COPRenderSprites_RenderSpriteCar
     if (Vars::Colors::ParticleModulation.Value.a != 255)
         pSortList->m_nAlpha = Vars::Colors::ParticleModulation.Value.a;
     CALL_ORIGINAL(rcx, meshBuilder, pCtx, info, hParticle, pSortList, pCamera);
+#endif
 }
 
 MAKE_HOOK(COPRenderSprites_RenderTwoSequenceSpriteCard, S::COPRenderSprites_RenderTwoSequenceSpriteCard(), void,
     void* rcx, void* meshBuilder, void* pCtx, SpriteRenderInfo_t& info, int hParticle, ParticleRenderData_t* pSortList, void* pCamera)
 {
-    DEBUG_RETURN(COPRenderSprites_RenderTwoSequenceSpriteCard, rcx, meshBuilder, pCtx, info, hParticle, pSortList, pCamera);
+	DEBUG_RETURN(COPRenderSprites_RenderTwoSequenceSpriteCard, rcx, meshBuilder, pCtx, info, hParticle, pSortList, pCamera);
 
+#ifndef TEXTMODE
     if (!(Vars::Visuals::World::Modulations.Value &Vars::Visuals::World::ModulationsEnum::Particle) || SDK::CleanScreenshot())
         return CALL_ORIGINAL(rcx, meshBuilder, pCtx, info, hParticle, pSortList, pCamera);
 
@@ -190,4 +195,5 @@ MAKE_HOOK(COPRenderSprites_RenderTwoSequenceSpriteCard, S::COPRenderSprites_Rend
     if (Vars::Colors::ParticleModulation.Value.a != 255)
         pSortList->m_nAlpha = Vars::Colors::ParticleModulation.Value.a;
     CALL_ORIGINAL(rcx, meshBuilder, pCtx, info, hParticle, pSortList, pCamera);
+#endif
 }

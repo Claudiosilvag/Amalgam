@@ -1,3 +1,4 @@
+#ifndef TEXTMODE
 #include "../SDK/SDK.h"
 
 MAKE_HOOK(IMaterialSystem_FindTexture, U::Memory.GetVirtual(I::MaterialSystem, 79), ITexture*,
@@ -29,3 +30,4 @@ MAKE_HOOK(IMaterialSystem_FindTexture, U::Memory.GetVirtual(I::MaterialSystem, 7
 
 	return pReturn;
 }
+#endif

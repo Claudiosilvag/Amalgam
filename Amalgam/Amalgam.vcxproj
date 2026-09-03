@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="DebugAVX2|Win32">
@@ -51,6 +51,22 @@
     </ProjectConfiguration>
     <ProjectConfiguration Include="ReleaseFreetype|x64">
       <Configuration>ReleaseFreetype</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="ReleaseTextmodeAVX2|Win32">
+      <Configuration>ReleaseTextmodeAVX2</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="ReleaseTextmodeAVX2|x64">
+      <Configuration>ReleaseTextmodeAVX2</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="ReleaseTextmode|Win32">
+      <Configuration>ReleaseTextmode</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="ReleaseTextmode|x64">
+      <Configuration>ReleaseTextmode</Configuration>
       <Platform>x64</Platform>
     </ProjectConfiguration>
     <ProjectConfiguration Include="Release|Win32">
@@ -109,6 +125,13 @@
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseTextmode|Win32'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseFreetype|Win32'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
@@ -123,11 +146,18 @@
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseFreetypeAVX2|Win32'" Label="Configuration">
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseTextmodeAVX2|Win32'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v143</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseFreetypeAVX2|Win32'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>false</WholeProgramOptimization>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
@@ -165,6 +195,13 @@
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseTextmode|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseFreetype|x64'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
@@ -179,14 +216,24 @@
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseFreetypeAVX2|x64'" Label="Configuration">
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseTextmodeAVX2|x64'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v143</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseFreetypeAVX2|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>false</WholeProgramOptimization>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <PropertyGroup>
+    <WholeProgramOptimization>false</WholeProgramOptimization>
+  </PropertyGroup>
   <ImportGroup Label="ExtensionSettings">
   </ImportGroup>
   <ImportGroup Label="Shared">
@@ -206,10 +253,16 @@
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseTextmode|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
   <ImportGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseFreetype|Win32'" Label="PropertySheets">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <ImportGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseAVX2|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseTextmodeAVX2|Win32'" Label="PropertySheets">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <ImportGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseFreetypeAVX2|Win32'" Label="PropertySheets">
@@ -230,10 +283,16 @@
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseTextmode|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
   <ImportGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseFreetype|x64'" Label="PropertySheets">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <ImportGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseAVX2|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseTextmodeAVX2|x64'" Label="PropertySheets">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <ImportGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseFreetypeAVX2|x64'" Label="PropertySheets">
@@ -275,6 +334,12 @@
     <OutDir>$(SolutionDir)output\$(Platform)\$(Configuration)\</OutDir>
     <LinkIncremental>false</LinkIncremental>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseTextmode|x64'">
+    <IncludePath>$(ProjectDir)include\;$(IncludePath)</IncludePath>
+    <IntDir>$(SolutionDir)build\$(Platform)\$(Configuration)\</IntDir>
+    <TargetName>$(ProjectName)$(Platform)$(Configuration)</TargetName>
+    <OutDir>$(SolutionDir)output\$(Platform)\$(Configuration)\</OutDir>
+  </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseFreetype|x64'">
     <IncludePath>$(ProjectDir)include\;$(IncludePath)</IncludePath>
     <IntDir>$(SolutionDir)build\$(Platform)\$(Configuration)\</IntDir>
@@ -288,6 +353,12 @@
     <TargetName>$(ProjectName)$(Platform)$(Configuration)</TargetName>
     <OutDir>$(SolutionDir)output\$(Platform)\$(Configuration)\</OutDir>
     <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseTextmodeAVX2|x64'">
+    <IncludePath>$(ProjectDir)include\;$(IncludePath)</IncludePath>
+    <IntDir>$(SolutionDir)build\$(Platform)\$(Configuration)\</IntDir>
+    <TargetName>$(ProjectName)$(Platform)$(Configuration)</TargetName>
+    <OutDir>$(SolutionDir)output\$(Platform)\$(Configuration)\</OutDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseFreetypeAVX2|x64'">
     <IncludePath>$(ProjectDir)include\;$(IncludePath)</IncludePath>
@@ -351,6 +422,17 @@
     <ExcludePath>$(CommonExcludePath);$(VC_ExecutablePath_x64);$(VC_LibraryPath_x64)</ExcludePath>
     <LinkIncremental>false</LinkIncremental>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseTextmode|Win32'">
+    <OutDir>$(SolutionDir)output\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(SolutionDir)build\$(Platform)\$(Configuration)\</IntDir>
+    <TargetName>$(ProjectName)$(Platform)$(Configuration)</TargetName>
+    <IncludePath>$(ProjectDir)include\;$(IncludePath)</IncludePath>
+    <ExecutablePath>$(VC_ExecutablePath_x64);$(CommonExecutablePath)</ExecutablePath>
+    <ReferencePath>$(VC_ReferencesPath_x64);</ReferencePath>
+    <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64)</LibraryPath>
+    <ExcludePath>$(CommonExcludePath);$(VC_ExecutablePath_x64);$(VC_LibraryPath_x64)</ExcludePath>
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseFreetype|Win32'">
     <OutDir>$(SolutionDir)output\$(Platform)\$(Configuration)\</OutDir>
     <IntDir>$(SolutionDir)build\$(Platform)\$(Configuration)\</IntDir>
@@ -363,6 +445,17 @@
     <LinkIncremental>false</LinkIncremental>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseAVX2|Win32'">
+    <OutDir>$(SolutionDir)output\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(SolutionDir)build\$(Platform)\$(Configuration)\</IntDir>
+    <TargetName>$(ProjectName)$(Platform)$(Configuration)</TargetName>
+    <IncludePath>$(ProjectDir)include\;$(IncludePath)</IncludePath>
+    <ExecutablePath>$(VC_ExecutablePath_x64);$(CommonExecutablePath)</ExecutablePath>
+    <ReferencePath>$(VC_ReferencesPath_x64);</ReferencePath>
+    <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64)</LibraryPath>
+    <ExcludePath>$(CommonExcludePath);$(VC_ExecutablePath_x64);$(VC_LibraryPath_x64)</ExcludePath>
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseTextmodeAVX2|Win32'">
     <OutDir>$(SolutionDir)output\$(Platform)\$(Configuration)\</OutDir>
     <IntDir>$(SolutionDir)build\$(Platform)\$(Configuration)\</IntDir>
     <TargetName>$(ProjectName)$(Platform)$(Configuration)</TargetName>
@@ -390,7 +483,7 @@
       <SDLCheck>false</SDLCheck>
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR;__CONFIGURATION__="Debug";__PLATFORM__="Win32";%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <LanguageStandard>stdcpp20</LanguageStandard>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <Optimization>MaxSpeed</Optimization>
@@ -422,7 +515,7 @@
       <SDLCheck>false</SDLCheck>
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR;IMGUI_ENABLE_FREETYPE;AMALGAM_CUSTOM_FONTS;__CONFIGURATION__="DebugFreetype";__PLATFORM__="Win32";%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <LanguageStandard>stdcpp20</LanguageStandard>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <Optimization>MaxSpeed</Optimization>
@@ -455,7 +548,7 @@
       <SDLCheck>false</SDLCheck>
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR;__CONFIGURATION__="DebugAVX2";__PLATFORM__="Win32";%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <LanguageStandard>stdcpp20</LanguageStandard>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <Optimization>MaxSpeed</Optimization>
@@ -488,7 +581,7 @@
       <SDLCheck>false</SDLCheck>
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR;IMGUI_ENABLE_FREETYPE;AMALGAM_CUSTOM_FONTS;__CONFIGURATION__="DebugFreetypeAVX2";__PLATFORM__="Win32";%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <LanguageStandard>stdcpp20</LanguageStandard>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <Optimization>MaxSpeed</Optimization>
@@ -523,7 +616,7 @@
       <SDLCheck>false</SDLCheck>
       <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR;__CONFIGURATION__="Release";__PLATFORM__="Win32";%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <LanguageStandard>stdcpp20</LanguageStandard>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <StringPooling>true</StringPooling>
@@ -544,6 +637,33 @@
       </AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseTextmode|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>false</SDLCheck>
+      <PreprocessorDefinitions>WIN32;TEXTMODE;NDEBUG;_CONSOLE;_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR;__CONFIGURATION__="ReleaseTextmode";__PLATFORM__="Win32";%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
+      <StringPooling>true</StringPooling>
+      <EnableEnhancedInstructionSet>NotSet</EnableEnhancedInstructionSet>
+      <OmitFramePointers>
+      </OmitFramePointers>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalLibraryDirectories>
+      </AdditionalLibraryDirectories>
+    </Link>
+  </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseFreetype|Win32'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
@@ -552,7 +672,7 @@
       <SDLCheck>false</SDLCheck>
       <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR;IMGUI_ENABLE_FREETYPE;AMALGAM_CUSTOM_FONTS;__CONFIGURATION__="ReleaseFreetype";__PLATFORM__="Win32";%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <LanguageStandard>stdcpp20</LanguageStandard>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <StringPooling>true</StringPooling>
@@ -582,7 +702,7 @@
       <SDLCheck>false</SDLCheck>
       <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR;__CONFIGURATION__="ReleaseAVX2";__PLATFORM__="Win32";%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <LanguageStandard>stdcpp20</LanguageStandard>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <StringPooling>true</StringPooling>
@@ -604,6 +724,33 @@
       </AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseTextmodeAVX2|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>false</SDLCheck>
+      <PreprocessorDefinitions>WIN32;TEXTMODE;NDEBUG;_CONSOLE;_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR;__CONFIGURATION__="ReleaseTextmodeAVX2";__PLATFORM__="Win32";%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
+      <StringPooling>true</StringPooling>
+      <EnableEnhancedInstructionSet>AdvancedVectorExtensions2</EnableEnhancedInstructionSet>
+      <OmitFramePointers>
+      </OmitFramePointers>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalLibraryDirectories>
+      </AdditionalLibraryDirectories>
+    </Link>
+  </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseFreetypeAVX2|Win32'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
@@ -612,7 +759,7 @@
       <SDLCheck>false</SDLCheck>
       <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR;IMGUI_ENABLE_FREETYPE;AMALGAM_CUSTOM_FONTS;__CONFIGURATION__="ReleaseFreetypeAVX2";__PLATFORM__="Win32";%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <LanguageStandard>stdcpp20</LanguageStandard>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <StringPooling>true</StringPooling>
@@ -640,7 +787,7 @@
       <SDLCheck>false</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR;__CONFIGURATION__="Debug";__PLATFORM__="x64";%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <LanguageStandard>stdcpp20</LanguageStandard>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <OmitFramePointers>
@@ -673,7 +820,7 @@
       <SDLCheck>false</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR;IMGUI_ENABLE_FREETYPE;AMALGAM_CUSTOM_FONTS;__CONFIGURATION__="DebugFreetype";__PLATFORM__="x64";%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <LanguageStandard>stdcpp20</LanguageStandard>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <OmitFramePointers>
@@ -706,7 +853,7 @@
       <SDLCheck>false</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR;__CONFIGURATION__="DebugAVX2";__PLATFORM__="x64";%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <LanguageStandard>stdcpp20</LanguageStandard>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <OmitFramePointers>
@@ -739,7 +886,7 @@
       <SDLCheck>false</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR;IMGUI_ENABLE_FREETYPE;AMALGAM_CUSTOM_FONTS;__CONFIGURATION__="DebugFreetypeAVX2";__PLATFORM__="x64";%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <LanguageStandard>stdcpp20</LanguageStandard>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <OmitFramePointers>
@@ -774,7 +921,7 @@
       <SDLCheck>false</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR;__CONFIGURATION__="Release";__PLATFORM__="x64";%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <LanguageStandard>stdcpp20</LanguageStandard>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <OmitFramePointers>
@@ -796,6 +943,33 @@
       </AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseTextmode|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>false</SDLCheck>
+      <PreprocessorDefinitions>TEXTMODE;NDEBUG;_CONSOLE;_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR;__CONFIGURATION__="ReleaseTextmode";__PLATFORM__="x64";%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
+      <OmitFramePointers>
+      </OmitFramePointers>
+      <StringPooling>true</StringPooling>
+      <EnableEnhancedInstructionSet>NotSet</EnableEnhancedInstructionSet>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalLibraryDirectories>
+      </AdditionalLibraryDirectories>
+    </Link>
+  </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseFreetype|x64'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
@@ -804,7 +978,7 @@
       <SDLCheck>false</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR;IMGUI_ENABLE_FREETYPE;AMALGAM_CUSTOM_FONTS;__CONFIGURATION__="ReleaseFreetype";__PLATFORM__="x64";%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <LanguageStandard>stdcpp20</LanguageStandard>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <OmitFramePointers>
@@ -834,7 +1008,7 @@
       <SDLCheck>false</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR;__CONFIGURATION__="ReleaseAVX2";__PLATFORM__="x64";%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <LanguageStandard>stdcpp20</LanguageStandard>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <OmitFramePointers>
@@ -856,6 +1030,33 @@
       </AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseTextmodeAVX2|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>false</SDLCheck>
+      <PreprocessorDefinitions>TEXTMODE;NDEBUG;_CONSOLE;_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR;__CONFIGURATION__="ReleaseTextmodeAVX2";__PLATFORM__="x64";%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
+      <OmitFramePointers>
+      </OmitFramePointers>
+      <StringPooling>true</StringPooling>
+      <EnableEnhancedInstructionSet>AdvancedVectorExtensions2</EnableEnhancedInstructionSet>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalLibraryDirectories>
+      </AdditionalLibraryDirectories>
+    </Link>
+  </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseFreetypeAVX2|x64'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
@@ -864,7 +1065,7 @@
       <SDLCheck>false</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR;IMGUI_ENABLE_FREETYPE;AMALGAM_CUSTOM_FONTS;__CONFIGURATION__="ReleaseFreetypeAVX2";__PLATFORM__="x64";%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <LanguageStandard>stdcpp20</LanguageStandard>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <OmitFramePointers>
@@ -914,12 +1115,55 @@
     <ClCompile Include="src\Features\Aimbot\AutoRocketJump\AutoRocketJump.cpp" />
     <ClCompile Include="src\Features\Aimbot\AutoHeal\AutoHeal.cpp" />
     <ClCompile Include="src\Features\AntiCheatCompatibility\AntiCheatCompatibility.cpp" />
+    <ClCompile Include="src\Features\AutoJoin\AutoJoin.cpp" />
+    <ClCompile Include="src\Features\Createmove\Createmove.cpp" />
+    <ClCompile Include="src\Features\FollowBot\FollowBot.cpp" />
+    <ClCompile Include="src\Features\Killstreak\Killstreak.cpp" />
+    <ClCompile Include="src\Features\Misc\AutoItem\AutoItem.cpp" />
+    <ClCompile Include="src\Features\Misc\NamedPipe\NamedPipe.cpp" />
+    <ClCompile Include="src\Features\NavBot\BotUtils.cpp" />
+    <ClCompile Include="src\Features\NavBot\BotUtilsJump.cpp" />
+    <ClCompile Include="src\Features\NavBot\BotUtilsLook.cpp" />
+    <ClCompile Include="src\Features\NavBot\BotUtilsScope.cpp" />
+    <ClCompile Include="src\Features\NavBot\Hazards\Hazards.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavBotCore.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavAreaUtils.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavBotConfig.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavRuntime.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavBotJobs\Capture.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavBotJobs\Engineer.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavBotJobs\EscapeDanger.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavBotJobs\GetSupplies.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavBotJobs\GroupWithOthers.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavBotJobs\JobSystem.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavBotJobs\Melee.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavBotJobs\MVMSniper.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavBotJobs\NavJobUtils.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavBotJobs\Reload.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavBotJobs\Roam.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavBotJobs\SnipeSentry.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavBotJobs\StayNear.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavEngine\Controllers\Controller.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavEngine\Controllers\CPController\CPController.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavEngine\Controllers\FlagController\FlagController.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavEngine\Controllers\HaarpController\HaarpController.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavEngine\Controllers\DoomsdayController\DoomsdayController.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavEngine\Controllers\MVMController\MVMController.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavEngine\Controllers\PasstimeController\PasstimeController.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavEngine\Controllers\PLController\PLController.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavEngine\NavEngine.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavEngine\Map.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavEngine\PathWorker.cpp" />
     <ClCompile Include="src\Features\Debug\Debug.cpp" />
     <ClCompile Include="src\Features\Output\Output.cpp" />
     <ClCompile Include="src\Features\Misc\AutoQueue\AutoQueue.cpp" />
+    <ClCompile Include="src\Features\Misc\AutoQueue\MvmQueue.cpp" />
+    <ClCompile Include="src\Features\Misc\ProfileStalker\ProfileStalker.cpp" Condition="Exists('src\Features\Misc\ProfileStalker\ProfileStalker.cpp')" />
     <ClCompile Include="src\Features\Backtrack\Backtrack.cpp" />
     <ClCompile Include="src\Features\Visuals\CameraWindow\CameraWindow.cpp" />
     <ClCompile Include="src\Features\CheatDetection\CheatDetection.cpp" />
+    <ClCompile Include="src\Hooks\CAvatarImage_ApplyImage.cpp" />
+    <ClCompile Include="src\Features\Players\SteamProfileCache.cpp" />
     <ClCompile Include="src\Features\Commands\Commands.cpp" />
     <ClCompile Include="src\Features\Binds\Binds.cpp" />
     <ClCompile Include="src\Features\Configs\Configs.cpp" />
@@ -929,6 +1173,7 @@
     <ClCompile Include="src\Features\ImGui\Menu\Menu.cpp" />
     <ClCompile Include="src\Features\Misc\AutoVote\AutoVote.cpp" />
     <ClCompile Include="src\Features\Misc\Misc.cpp" />
+    <ClCompile Include="src\Features\Misc\TelemetryBlocker\TelemetryBlocker.cpp" />
     <ClCompile Include="src\Features\NetworkFix\NetworkFix.cpp" />
     <ClCompile Include="src\Features\NoSpread\NoSpread.cpp" />
     <ClCompile Include="src\Features\NoSpread\NoSpreadHitscan\NoSpreadHitscan.cpp" />
@@ -964,12 +1209,20 @@
     <ClCompile Include="src\Hooks\CBaseAnimating_SetupBones.cpp" />
     <ClCompile Include="src\Hooks\CTFGrapplingHook_ItemPostFrame.cpp" />
     <ClCompile Include="src\Hooks\CTFPlayer_UpdateClientSideAnimation.cpp" />
-    <ClCompile Include="src\Hooks\CBaseViewModel_Interpolate.cpp" />
     <ClCompile Include="src\Hooks\CBaseEntity_EstimateAbsVelocity.cpp" />
+    <ClCompile Include="src\Hooks\CBaseViewModel_Interpolate.cpp" />
+    <ClCompile Include="src\Hooks\CBoneFollower_TestCollision.cpp" />
+    <ClCompile Include="src\Hooks\CEntityMapData_ExtractValue.cpp" />
+    <ClCompile Include="src\Hooks\CGameEventManager_FireEventClientSide.cpp" />
+    <ClCompile Include="src\Hooks\CHudItemEffectMeter_Weapon_C_TFWeaponBase_IsEnabled.cpp" />
+    <ClCompile Include="src\Hooks\CHudTournamentSetup_OnTick.cpp" />
     <ClCompile Include="src\Hooks\CBasePlayer_CalcObserverView.cpp" />
     <ClCompile Include="src\Hooks\CEngineClient_GetScreenAspectRatio.cpp" />
     <ClCompile Include="src\Hooks\CHLTVCamera_CalcView.cpp" />
     <ClCompile Include="src\Hooks\CInput_ValidateUserCmd.cpp" />
+    <ClCompile Include="src\Hooks\CTFGCClientSystem_SOCreated.cpp" />
+    <ClCompile Include="src\Hooks\CTFHudPlayerClass_UpdateModelPanel.cpp" />
+    <ClCompile Include="src\Hooks\CTFInventoryManager_ShowItemsPickedUp.cpp" />
     <ClCompile Include="src\Hooks\CModelLoader_Map_LoadModel.cpp" />
     <ClCompile Include="src\Hooks\CM_TraceToDispTree.cpp" />
     <ClCompile Include="src\Hooks\CTFPlayerShared_ShouldSuppressPrediction.cpp" />
@@ -985,24 +1238,22 @@
     <ClCompile Include="src\Hooks\CBasePlayer_ItemPostFrame.cpp" />
     <ClCompile Include="src\Hooks\CBaseViewModel_ShouldFlipViewModel.cpp" />
     <ClCompile Include="src\Hooks\Cbuf_ExecuteCommand.cpp" />
-    <ClCompile Include="src\Hooks\CHLClient_CreateMove.cpp" />
     <ClCompile Include="src\Hooks\CClientModeShared_DoPostScreenSpaceEffects.cpp" />
     <ClCompile Include="src\Hooks\CClientModeShared_OverrideView.cpp" />
     <ClCompile Include="src\Hooks\CClientModeShared_ShouldDrawViewModel.cpp" />
     <ClCompile Include="src\Hooks\CClientState_GetClientInterpAmount.cpp" />
     <ClCompile Include="src\Hooks\CClientState_ProcessFixAngle.cpp" />
     <ClCompile Include="src\Hooks\CHudCrosshair_GetDrawPosition.cpp" />
-    <ClCompile Include="src\Hooks\CInventoryManager_ShowItemsPickedUp.cpp" />
     <ClCompile Include="src\Hooks\ClientModeTFNormal_BIsFriendOrPartyMember.cpp" />
     <ClCompile Include="src\Hooks\CL_CheckForPureServerWhitelist.cpp" />
     <ClCompile Include="src\Hooks\CL_Move.cpp" />
     <ClCompile Include="src\Hooks\CL_ProcessPacketEntities.cpp" />
     <ClCompile Include="src\Hooks\CL_ReadPackets.cpp" />
     <ClCompile Include="src\Hooks\CMatchInviteNotification_OnTick.cpp" />
-    <ClCompile Include="src\Hooks\CMaterial_Uncache.cpp" />
     <ClCompile Include="src\Hooks\CTFWeaponBase_CanFireRandomCriticalShot.cpp" />
     <ClCompile Include="src\Hooks\CTFPlayer_GetMinFOV.cpp" />
     <ClCompile Include="src\Hooks\CWeaponMedigun_PrimaryAttack.cpp" />
+    <ClCompile Include="src\Hooks\Host_IsSecureServerAllowed.cpp" />
     <ClCompile Include="src\Hooks\CNetChannel_SendDatagram.cpp" />
     <ClCompile Include="src\Hooks\CNetChannel_SendNetMsg.cpp" />
     <ClCompile Include="src\Hooks\COPRenderSprites_Render.cpp" />
@@ -1053,6 +1304,7 @@
     <ClCompile Include="src\Hooks\IMaterialSystem_FindTexture.cpp" />
     <ClCompile Include="src\Hooks\IMatSystemSurface_OnScreenSizeChanged.cpp" />
     <ClCompile Include="src\Hooks\IPanel_PaintTraverse.cpp" />
+    <ClCompile Include="src\Hooks\IsFreeTrialAccount.cpp" />
     <ClCompile Include="src\Hooks\ISteamFriends_GetFriendPersonaName.cpp" />
     <ClCompile Include="src\Hooks\ISteamNetworkingUtils_GetPingToDataCenter.cpp" />
     <ClCompile Include="src\Hooks\IVModelRender_DrawModelExecute.cpp" />
@@ -1063,17 +1315,20 @@
     <ClCompile Include="src\Hooks\CTFPlayer_InSameDisguisedTeam.cpp" />
     <ClCompile Include="src\Hooks\TF_IsHolidayActive.cpp" />
     <ClCompile Include="src\Hooks\VGuiMenuBuilder_AddMenuItem.cpp" />
+    <ClCompile Include="src\Hooks\Voice_Enabled.cpp" />
     <ClCompile Include="src\SDK\Definitions\Main\CBaseAnimating.cpp" />
     <ClCompile Include="src\SDK\Definitions\Main\CBaseCombatCharacter.cpp" />
     <ClCompile Include="src\SDK\Definitions\Main\CBaseEntity.cpp" />
     <ClCompile Include="src\SDK\Definitions\Main\CBaseObject.cpp" />
     <ClCompile Include="src\SDK\Definitions\Main\CBasePlayer.cpp" />
     <ClCompile Include="src\SDK\Definitions\Main\CBaseProjectile.cpp" />
+    <ClCompile Include="src\SDK\Definitions\Main\CEntityMapData.cpp" />
     <ClCompile Include="src\SDK\Definitions\Main\CTFPlayer.cpp" />
     <ClCompile Include="src\SDK\Definitions\Main\CTFWeaponBase.cpp" />
     <ClCompile Include="src\SDK\Definitions\Main\INetMessage.cpp" />
     <ClCompile Include="src\SDK\Definitions\Main\KeyValues.cpp" />
     <ClCompile Include="src\SDK\Definitions\Main\MD5.cpp" />
+    <ClCompile Include="src\SDK\Definitions\Main\ValveRandom.cpp" />
     <ClCompile Include="src\SDK\Definitions\Misc\bitbuf.cpp" />
     <ClCompile Include="src\SDK\Definitions\Misc\CByteSwap.cpp" />
     <ClCompile Include="src\SDK\Definitions\Misc\ChecksumCRC.cpp" />
@@ -1227,12 +1482,41 @@
     <ClInclude Include="src\Features\Aimbot\AutoRocketJump\AutoRocketJump.h" />
     <ClInclude Include="src\Features\Aimbot\AutoHeal\AutoHeal.h" />
     <ClInclude Include="src\Features\AntiCheatCompatibility\AntiCheatCompatibility.h" />
+    <ClInclude Include="src\Features\AutoJoin\AutoJoin.h" />
+    <ClInclude Include="src\Features\Createmove\Createmove.h" />
+    <ClInclude Include="src\Features\FollowBot\FollowBot.h" />
+    <ClInclude Include="src\Features\Killstreak\Killstreak.h" />
+    <ClInclude Include="src\Features\Misc\AutoItem\AutoItem.h" />
+    <ClInclude Include="src\Features\Misc\NamedPipe\NamedPipe.h" />
+    <ClInclude Include="src\Features\NavBot\BotUtils.h" />
+    <ClInclude Include="src\Features\NavBot\Hazards\Hazards.h" />
+    <ClInclude Include="src\Features\NavBot\NavBotCore.h" />
+    <ClInclude Include="src\Features\NavBot\NavAreaUtils.h" />
+    <ClInclude Include="src\Features\NavBot\NavBotConfig.h" />
+    <ClInclude Include="src\Features\NavBot\NavRuntime.h" />
+    <ClInclude Include="src\Features\NavBot\NavBotJobs\NavBotJobs.h" />
+    <ClInclude Include="src\Features\NavBot\NavEngine\Controllers\Controller.h" />
+    <ClInclude Include="src\Features\NavBot\NavEngine\Controllers\CPController\CPController.h" />
+    <ClInclude Include="src\Features\NavBot\NavEngine\Controllers\FlagController\FlagController.h" />
+    <ClInclude Include="src\Features\NavBot\NavEngine\Controllers\HaarpController\HaarpController.h" />
+    <ClInclude Include="src\Features\NavBot\NavEngine\Controllers\DoomsdayController\DoomsdayController.h" />
+    <ClInclude Include="src\Features\NavBot\NavEngine\Controllers\MVMController\MVMController.h" />
+    <ClInclude Include="src\Features\NavBot\NavEngine\Controllers\PasstimeController\PasstimeController.h" />
+    <ClInclude Include="src\Features\NavBot\NavEngine\Controllers\PLController\PLController.h" />
+    <ClInclude Include="src\Features\NavBot\NavEngine\FileReader\CNavFile.h" />
+    <ClInclude Include="src\Features\NavBot\NavEngine\FileReader\nav.h" />
+    <ClInclude Include="src\Features\NavBot\NavEngine\NavEngine.h" />
+    <ClInclude Include="src\Features\NavBot\NavEngine\Map.h" />
+    <ClInclude Include="src\Features\NavBot\NavEngine\PathWorker.h" />
     <ClInclude Include="src\Features\Debug\Debug.h" />
     <ClInclude Include="src\Features\ImGui\Easings\Easings.h" />
     <ClInclude Include="src\Features\Output\Output.h" />
     <ClInclude Include="src\Features\Misc\AutoQueue\AutoQueue.h" />
+    <ClInclude Include="src\Features\Misc\AutoQueue\MvmQueue.h" />
+    <ClInclude Include="src\Features\Misc\ProfileStalker\ProfileStalker.h" Condition="Exists('src\Features\Misc\ProfileStalker\ProfileStalker.h')" />
     <ClInclude Include="src\Features\Backtrack\Backtrack.h" />
     <ClInclude Include="src\Features\CheatDetection\CheatDetection.h" />
+    <ClInclude Include="src\Features\Players\SteamProfileCache.h" />
     <ClInclude Include="src\Features\CritHack\CritHack.h" />
     <ClInclude Include="src\Features\EnginePrediction\EnginePrediction.h" />
     <ClInclude Include="src\Features\ImGui\Fonts\CascadiaMono\CascadiaMono.h" />
@@ -1242,6 +1526,7 @@
     <ClInclude Include="src\Features\ImGui\Fonts\Roboto\RobotoMedium.h" />
     <ClInclude Include="src\Features\Misc\AutoVote\AutoVote.h" />
     <ClInclude Include="src\Features\Misc\Misc.h" />
+    <ClInclude Include="src\Features\Misc\TelemetryBlocker\TelemetryBlocker.h" />
     <ClInclude Include="src\Features\NetworkFix\NetworkFix.h" />
     <ClInclude Include="src\Features\NoSpread\NoSpread.h" />
     <ClInclude Include="src\Features\NoSpread\NoSpreadHitscan\NoSpreadHitscan.h" />
@@ -1265,18 +1550,24 @@
     <ClInclude Include="src\Features\Visuals\Visuals.h" />
     <ClInclude Include="src\Features\World\World.h" />
     <ClInclude Include="src\Hooks\Direct3DDevice9.h" />
+    <ClInclude Include="src\SDK\Definitions\Interfaces\CModelLoader.h" />
+    <ClInclude Include="src\SDK\Definitions\Interfaces\CServerTools.h" />
     <ClInclude Include="src\SDK\Definitions\Interfaces\CCollisionBSPData.h" />
     <ClInclude Include="src\SDK\Definitions\Interfaces\CMDLCache.h" />
     <ClInclude Include="src\SDK\Definitions\Interfaces\CStaticPropMgr.h" />
     <ClInclude Include="src\SDK\Definitions\Interfaces\CTFGameRules.h" />
     <ClInclude Include="src\SDK\Definitions\Interfaces\CTFGCClientSystem.h" />
     <ClInclude Include="src\SDK\Definitions\Interfaces\CHLClient.h" />
+    <ClInclude Include="src\SDK\Definitions\Interfaces\CTFInventoryManager.h" />
     <ClInclude Include="src\SDK\Definitions\Interfaces\CThirdPersonManager.h" />
+    <ClInclude Include="src\SDK\Definitions\Interfaces\IDemoPlayer.h" />
+    <ClInclude Include="src\SDK\Definitions\Interfaces\IDemoRecorder.h" />
     <ClInclude Include="src\SDK\Definitions\Interfaces\IFileSystem.h" />
     <ClInclude Include="src\SDK\Definitions\Interfaces\IGameMovement.h" />
     <ClInclude Include="src\SDK\Definitions\Interfaces\IInput.h" />
     <ClInclude Include="src\SDK\Definitions\Interfaces\IKeyValuesSystem.h" />
     <ClInclude Include="src\SDK\Definitions\Interfaces\ILocalize.h" />
+    <ClInclude Include="src\SDK\Definitions\Misc\IMDLCache.h" />
     <ClInclude Include="src\SDK\Definitions\Interfaces\IMemAlloc.h" />
     <ClInclude Include="src\SDK\Definitions\Interfaces\IPanel.h" />
     <ClInclude Include="src\SDK\Definitions\Interfaces\IStudioRender.h" />
@@ -1286,15 +1577,28 @@
     <ClInclude Include="src\SDK\Definitions\Interfaces\ViewRenderBeams.h" />
     <ClInclude Include="src\SDK\Definitions\Interfaces\WorldBrushData.h" />
     <ClInclude Include="src\SDK\Definitions\Main\CBaseObject.h" />
+    <ClInclude Include="src\SDK\Definitions\Main\CBaseTeamObjectiveResource.h" />
+    <ClInclude Include="src\SDK\Definitions\Main\CFuncPasstimeGoal.h" />
+    <ClInclude Include="src\SDK\Definitions\Main\CPasstimeBall.h" />
+    <ClInclude Include="src\SDK\Definitions\Main\CTFPasstimeLogic.h" />
+    <ClInclude Include="src\SDK\Definitions\Main\CBaseToggle.h" />
     <ClInclude Include="src\SDK\Definitions\Main\CBaseTrace.h" />
+    <ClInclude Include="src\SDK\Definitions\Main\CBaseTrigger.h" />
     <ClInclude Include="src\SDK\Definitions\Main\CCaptureFlag.h" />
     <ClInclude Include="src\SDK\Definitions\Main\CCollisionProperty.h" />
     <ClInclude Include="src\SDK\Definitions\Interfaces\CDispCollTree.h" />
     <ClInclude Include="src\SDK\Definitions\Main\CEconEntity.h" />
     <ClInclude Include="src\SDK\Definitions\Main\CEconWearable.h" />
+    <ClInclude Include="src\SDK\Definitions\Main\CEntityMapData.h" />
     <ClInclude Include="src\SDK\Definitions\Main\CEntitySphereQuery.h" />
+    <ClInclude Include="src\SDK\Definitions\Main\CFuncRespawnRoom.h" />
+    <ClInclude Include="src\SDK\Definitions\Main\CFuncRespawnRoomShim.h" />
     <ClInclude Include="src\SDK\Definitions\Main\CGameTrace.h" />
     <ClInclude Include="src\SDK\Definitions\Interfaces\CHLTVCamera.h" />
+    <ClInclude Include="src\SDK\Definitions\Main\CServerBaseEntity.h" />
+    <ClInclude Include="src\SDK\Definitions\Main\IServerEntity.h" />
+    <ClInclude Include="src\SDK\Definitions\Main\IServerUnknown.h" />
+    <ClInclude Include="src\SDK\Definitions\Main\ValveRandom.h" />
     <ClInclude Include="src\SDK\Definitions\Main\CMapLoadHelper.h" />
     <ClInclude Include="src\SDK\Definitions\Main\CStaticProp.h" />
     <ClInclude Include="src\SDK\Definitions\Main\ICollideable.h" />
@@ -1332,7 +1636,6 @@
     <ClInclude Include="src\SDK\Definitions\Misc\dt_send.h" />
     <ClInclude Include="src\SDK\Definitions\Main\IDispInfo.h" />
     <ClInclude Include="src\SDK\Definitions\Misc\IMatchGroupDescription.h" />
-    <ClInclude Include="src\SDK\Definitions\Misc\IMDLCache.h" />
     <ClInclude Include="src\SDK\Definitions\Misc\IPrediction.h" />
     <ClInclude Include="src\SDK\Definitions\Interfaces\ISpatialPartition.h" />
     <ClInclude Include="src\SDK\Definitions\Misc\IStudioDataCache.h" />
@@ -1383,6 +1686,7 @@
     <ClInclude Include="src\Features\Binds\Binds.h" />
     <ClInclude Include="src\Features\Configs\Configs.h" />
     <ClInclude Include="src\Features\ImGui\Render.h" />
+    <ClInclude Include="src\Features\ImGui\IndicatorPanel.h" />
     <ClInclude Include="src\Features\ImGui\MaterialDesign\IconDefinitions.h" />
     <ClInclude Include="src\Features\ImGui\MaterialDesign\MaterialIcons.h" />
     <ClInclude Include="src\Features\ImGui\Menu\Components.h" />
@@ -1527,7 +1831,7 @@
   </ImportGroup>
   <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
     <PropertyGroup>
-      <ErrorText>This project references NuGet package(s) that are missing on this computer. Use NuGet Package Restore to download them.  For more information, see http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}.</ErrorText>
+      <ErrorText>Данный проект ссылается на пакеты NuGet, отсутствующие на этом компьютере. Используйте восстановление пакетов NuGet, чтобы скачать их.  Дополнительную информацию см. по адресу: http://go.microsoft.com/fwlink/?LinkID=322105. Отсутствует следующий файл: {0}.</ErrorText>
     </PropertyGroup>
     <Error Condition="!Exists('..\packages\boost.1.87.0\build\boost.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\boost.1.87.0\build\boost.targets'))" />
   </Target>

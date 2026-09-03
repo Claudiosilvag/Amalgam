@@ -2,6 +2,7 @@
 
 #include "../../Ticks/Ticks.h"
 #include "../../AntiCheatCompatibility/AntiCheatCompatibility.h"
+#include "../../ImGui/IndicatorPanel.h"
 #include <regex>
 #include <numeric>
 
@@ -134,6 +135,7 @@ bool CNoSpreadHitscan::ParsePlayerPerf(const std::string& sMsg)
 
 void CNoSpreadHitscan::Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd)
 {
+	m_iPredictionBullet = -1;
 	if (!ShouldRun(pWeapon))
 		return;
 
@@ -150,11 +152,13 @@ void CNoSpreadHitscan::Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* 
 	int iBulletsPerShot = pWeapon->GetBulletsPerShot();
 	float flFireRate = std::ceilf(pWeapon->GetFireRate() / TICK_INTERVAL) * TICK_INTERVAL;
 
-	std::vector<Vec3> vBulletCorrections = {};
+	CValve_Random* Random = new CValve_Random();
+
+	std::vector<std::pair<int,Vec3>> vBulletCorrections = {};
 	Vec3 vAverageSpread = {};
 	for (int iBullet = 0; iBullet < iBulletsPerShot; iBullet++)
 	{
-		SDK::RandomSeed(m_iSeed + iBullet);
+		Random->SetSeed(m_iSeed + iBullet);// SDK::RandomSeed(m_iSeed + iBullet);
 
 		if (!iBullet) // check if we'll get a guaranteed perfect shot
 		{
@@ -168,44 +172,75 @@ void CNoSpreadHitscan::Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* 
 			}
 		}
 
-		const float x = SDK::RandomFloat(-0.5f, 0.5f) + SDK::RandomFloat(-0.5f, 0.5f);
-		const float y = SDK::RandomFloat(-0.5f, 0.5f) + SDK::RandomFloat(-0.5f, 0.5f);
+		const float x = Random->RandomFloat(-0.5f, 0.5f) + Random->RandomFloat(-0.5f, 0.5f);//SDK::RandomFloat(-0.5f, 0.5f) + SDK::RandomFloat(-0.5f, 0.5f);
+		const float y = Random->RandomFloat(-0.5f, 0.5f) + Random->RandomFloat(-0.5f, 0.5f);//SDK::RandomFloat(-0.5f, 0.5f) + SDK::RandomFloat(-0.5f, 0.5f);
 
 		Vec3 vForward, vRight, vUp; Math::AngleVectors(pCmd->viewangles, &vForward, &vRight, &vUp);
 		Vec3 vFixedSpread = vForward + (vRight * x * flSpread) + (vUp * y * flSpread);
 		vFixedSpread.Normalize();
 		vAverageSpread += vFixedSpread;
 
-		vBulletCorrections.push_back(vFixedSpread);
+		vBulletCorrections.push_back( { iBullet, vFixedSpread } );
 	}
+	delete(Random);
 	vAverageSpread /= static_cast<float>(iBulletsPerShot);
 
 	const auto cFixedSpread = std::ranges::min_element(vBulletCorrections,
-		[&](const Vec3& lhs, const Vec3& rhs)
+		[&](const std::pair<int,Vec3>& lhs, const std::pair<int,Vec3>& rhs)
 		{
-			return lhs.DistToSqr(vAverageSpread) < rhs.DistToSqr(vAverageSpread);
+			return lhs.second.DistToSqr(vAverageSpread) < rhs.second.DistToSqr(vAverageSpread);
 		});
 
-	if (cFixedSpread == vBulletCorrections.end())
+	if (cFixedSpread == vBulletCorrections.end() && iBulletsPerShot > 1)
 		return;
 
-	Vec3 vFixedAngles = Math::VectorAngles(*cFixedSpread);
+	Vec3 vFixedAngles = Math::VectorAngles((*cFixedSpread).second);
 
 	pCmd->viewangles += pCmd->viewangles - vFixedAngles;
 	Math::ClampAngles(pCmd->viewangles);
 
+	m_iPredictionBullet = (*cFixedSpread).first;
+	
 	G::SilentAngles = true;
 }
 
 void CNoSpreadHitscan::Draw(CTFPlayer* pLocal)
 {
-	if (!(Vars::Menu::Indicators.Value & Vars::Menu::IndicatorsEnum::SeedPrediction) || !ShouldRun() || !pLocal->IsAlive())
+	static std::string sUptime = {};
+	static std::string sMantissaStep = {};
+	static std::string sDelta = {};
+	static Color_t tCachedColor = {};
+	static bool bCachedValid = false;
+
+	if (!(Vars::Menu::Indicators.Value & Vars::Menu::IndicatorsEnum::SeedPrediction))
+	{
+		bCachedValid = false;
+		return;
+	}
+
+	if (pLocal)
+	{
+		if (!ShouldRun() || !pLocal->IsAlive())
+		{
+			bCachedValid = false;
+			return;
+		}
+
+		tCachedColor = m_bSynced ? Vars::Menu::Theme::Active.Value : Vars::Menu::Theme::Inactive.Value;
+		sUptime = std::format("Uptime {}", GetFormat(m_flServerTime));
+		sMantissaStep = std::format("Mantissa step {}", m_flMantissaStep);
+		sDelta = std::format("Delta {:.3f}", m_dTimeDelta);
+		bCachedValid = true;
+	}
+
+	if (!bCachedValid)
 		return;
 
 	int x = Vars::Menu::SeedPredictionDisplay.Value.x;
 	int y = Vars::Menu::SeedPredictionDisplay.Value.y + 8;
 	const auto& fFont = H::Fonts.GetFont(FONT_INDICATORS);
 	const int nTall = fFont.m_nTall + H::Draw.Scale(1);
+	ImDrawList* pDrawList = ImGui::GetBackgroundDrawList();
 
 	EAlign align = ALIGN_TOP;
 	if (x <= 100 + H::Draw.Scale(50, Scale_Round))
@@ -219,10 +254,8 @@ void CNoSpreadHitscan::Draw(CTFPlayer* pLocal)
 		align = ALIGN_TOPRIGHT;
 	}
 
-	const auto& cColor = m_bSynced ? Vars::Menu::Theme::Active.Value : Vars::Menu::Theme::Inactive.Value;
-
-	H::Draw.StringOutlined(fFont, x, y, cColor, Vars::Menu::Theme::Background.Value, align, std::format("Uptime {}", GetFormat(m_flServerTime)).c_str());
-	H::Draw.StringOutlined(fFont, x, y += nTall, cColor, Vars::Menu::Theme::Background.Value, align, std::format("Mantissa step {}", m_flMantissaStep).c_str());
+	DrawIndicatorText(pDrawList, x, y, tCachedColor, Vars::Menu::Theme::Background.Value, align, sUptime);
+	DrawIndicatorText(pDrawList, x, y += nTall, tCachedColor, Vars::Menu::Theme::Background.Value, align, sMantissaStep);
 	if (Vars::Debug::Info.Value)
-		H::Draw.StringOutlined(fFont, x, y += nTall, cColor, Vars::Menu::Theme::Background.Value, align, std::format("Delta {:.3f}", m_dTimeDelta).c_str());
+		DrawIndicatorText(pDrawList, x, y += nTall, tCachedColor, Vars::Menu::Theme::Background.Value, align, sDelta);
 }

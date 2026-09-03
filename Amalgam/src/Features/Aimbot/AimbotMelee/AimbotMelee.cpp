@@ -5,20 +5,72 @@
 #include "../../EnginePrediction/EnginePrediction.h"
 #include "../../Ticks/Ticks.h"
 #include "../../Visuals/Visuals.h"
+#include "../../NavBot/BotUtils.h"
 #include "../../AntiCheatCompatibility/AntiCheatCompatibility.h"
 
-static inline bool AimFriendlyBuilding(CBaseObject* pBuilding)
+static inline bool AimFriendlyBuilding(CTFPlayer* pLocal, CBaseObject* pBuilding)
 {
-	if (!pBuilding->m_bMiniBuilding() && pBuilding->m_iUpgradeLevel() != 3 || pBuilding->m_iHealth() < pBuilding->m_iMaxHealth() || pBuilding->m_bHasSapper())
-		return true;
+	int iCurrMetal = pLocal->m_iMetalCount();
 
-	if (pBuilding->IsSentrygun())
+	bool bShouldRepair = false;
+	switch (pBuilding->GetClassID())
 	{
-		int iShells, iMaxShells, iRockets, iMaxRockets; pBuilding->As<CObjectSentrygun>()->GetAmmoCount(iShells, iMaxShells, iRockets, iMaxRockets);
-		if (iShells < iMaxShells || iRockets < iMaxRockets)
-			return true;
+	case ETFClassID::CObjectSentrygun:
+		if (Vars::Aimbot::AutoEngie::AutoRepair.Value & Vars::Aimbot::AutoEngie::AutoRepairEnum::Sentry)
+		{
+			int iShells, iMaxShells, iRockets, iMaxRockets; pBuilding->As<CObjectSentrygun>()->GetAmmoCount(iShells, iMaxShells, iRockets, iMaxRockets);
+			if (iCurrMetal && (iShells < iMaxShells || iRockets < iMaxRockets))
+				return true;
+			bShouldRepair = true;
+		}
+		break;
+	case ETFClassID::CObjectDispenser:
+		if (Vars::Aimbot::AutoEngie::AutoRepair.Value & Vars::Aimbot::AutoEngie::AutoRepairEnum::Dispenser)
+			bShouldRepair = true;
+		break;
+	case ETFClassID::CObjectTeleporter:
+		if (Vars::Aimbot::AutoEngie::AutoRepair.Value & Vars::Aimbot::AutoEngie::AutoRepairEnum::Teleporter)
+			bShouldRepair = true;
+		break;
+	default:
+		break;
 	}
 
+	// Buildings needs to be repaired
+	if (bShouldRepair && ((iCurrMetal && pBuilding->m_iHealth() != pBuilding->m_iMaxHealth()) || pBuilding->m_bHasSapper()))
+		return true;
+
+	// Autoupgrade is on
+	if (iCurrMetal && Vars::Aimbot::AutoEngie::AutoUpgrade.Value && !pBuilding->m_bMiniBuilding())
+	{
+		int iUpgradeLevel = pBuilding->m_iUpgradeLevel();
+
+		int iMaxLevel = 0;
+		switch (pBuilding->GetClassID())
+		{
+		case ETFClassID::CObjectSentrygun:
+			if (!(Vars::Aimbot::AutoEngie::AutoUpgrade.Value & Vars::Aimbot::AutoEngie::AutoUpgradeEnum::Sentry))
+				return false;
+			iMaxLevel = Vars::Aimbot::AutoEngie::AutoUpgradeSentryLVL.Value;
+			break;
+		case ETFClassID::CObjectDispenser:
+			if (!(Vars::Aimbot::AutoEngie::AutoUpgrade.Value & Vars::Aimbot::AutoEngie::AutoUpgradeEnum::Dispenser))
+				return false;
+			iMaxLevel = Vars::Aimbot::AutoEngie::AutoUpgradeDispenserLVL.Value;
+			break;
+		case ETFClassID::CObjectTeleporter:
+			if (!(Vars::Aimbot::AutoEngie::AutoUpgrade.Value & Vars::Aimbot::AutoEngie::AutoUpgradeEnum::Teleporter))
+				return false;
+			iMaxLevel = Vars::Aimbot::AutoEngie::AutoUpgradeTeleporterLVL.Value;
+			break;
+		default:
+			break;
+		}
+
+		// Can be upgraded
+		if (iUpgradeLevel < iMaxLevel)
+			return true;
+	}
 	return false;
 }
 
@@ -59,7 +111,7 @@ static inline std::vector<Target_t> GetTargets(CTFPlayer* pLocal, CTFWeaponBase*
 		if (Vars::Aimbot::General::Target.Value & Vars::Aimbot::General::TargetEnum::Building)
 			eGroup = EntityEnum::BuildingEnemy;
 		bool bWrench = pWeapon->GetWeaponID() == TF_WEAPON_WRENCH, bSapper = SDK::AttribHookValue(0, "set_dmg_apply_to_sapper", pWeapon);
-		if (Vars::Aimbot::Healing::AutoRepair.Value && (bWrench || bSapper))
+		if ((Vars::Aimbot::AutoEngie::AutoUpgrade.Value || Vars::Aimbot::AutoEngie::AutoRepair.Value) && (bWrench || bSapper))
 			eGroup = eGroup != EntityEnum::Invalid ? EntityEnum::BuildingAll : EntityEnum::BuildingTeam;
 		for (auto pEntity : H::Entities.GetGroup(eGroup))
 		{
@@ -67,7 +119,7 @@ static inline std::vector<Target_t> GetTargets(CTFPlayer* pLocal, CTFWeaponBase*
 				continue;
 
 			bool bTeam = pEntity->m_iTeamNum() == pLocal->m_iTeamNum();
-			if (bTeam && (bWrench && !AimFriendlyBuilding(pEntity->As<CBaseObject>()) || bSapper && !pEntity->As<CBaseObject>()->m_bHasSapper()))
+			if (bTeam && (bWrench && !AimFriendlyBuilding(pLocal, pEntity->As<CBaseObject>()) || bSapper && !pEntity->As<CBaseObject>()->m_bHasSapper()))
 				continue;
 
 			float flFOVTo; Vec3 vPos, vAngleTo;
@@ -81,7 +133,11 @@ static inline std::vector<Target_t> GetTargets(CTFPlayer* pLocal, CTFWeaponBase*
 				switch (Vars::Aimbot::Healing::HealPriority.Value)
 				{
 				case Vars::Aimbot::Healing::HealPriorityEnum::PrioritizeFriends:
-					if (iOwner == I::EngineClient->GetLocalPlayer() || H::Entities.IsFriend(iOwner) || H::Entities.InParty(iOwner))
+					if (iOwner == I::EngineClient->GetLocalPlayer() || H::Entities.IsFriend(iOwner))
+						iPriority = std::numeric_limits<int>::max();
+					break;
+				case Vars::Aimbot::Healing::HealPriorityEnum::PrioritizeParty:
+					if (H::Entities.InParty(iOwner))
 						iPriority = std::numeric_limits<int>::max();
 					break;
 				case Vars::Aimbot::Healing::HealPriorityEnum::PrioritizeTeam:
@@ -364,9 +420,7 @@ int CAimbotMelee::CanHit(Target_t& tTarget, CTFPlayer* pLocal, CTFWeaponBase* pW
 	}
 
 	CGameTrace trace = {};
-	CTraceFilterHitscan filter = {};
-	filter.pSkip = pLocal;
-
+	CTraceFilterHitscan filter(pLocal);
 	for (auto pRecord : vRecords)
 	{
 		// possibly account melee bounds as well?
@@ -398,7 +452,7 @@ int CAimbotMelee::CanHit(Target_t& tTarget, CTFPlayer* pLocal, CTFWeaponBase* pW
 
 		if (bReturn && Vars::Aimbot::Melee::AutoBackstab.Value && pWeapon->GetWeaponID() == TF_WEAPON_KNIFE)
 			bReturn = CanBackstab(tTarget.m_pEntity, pLocal, tTarget.m_vAngleTo);
-		
+
 		tTarget.m_pEntity->SetAbsOrigin(vRestoreOrigin);
 		tTarget.m_pEntity->m_vecMins() = vRestoreMins;
 		tTarget.m_pEntity->m_vecMaxs() = vRestoreMaxs;
@@ -413,7 +467,9 @@ int CAimbotMelee::CanHit(Target_t& tTarget, CTFPlayer* pLocal, CTFWeaponBase* pW
 		else switch (Vars::Aimbot::General::AimType.Value)
 		{
 		case Vars::Aimbot::General::AimTypeEnum::Smooth:
+		case Vars::Aimbot::General::AimTypeEnum::SmoothVelocity:
 		case Vars::Aimbot::General::AimTypeEnum::Assistive:
+		case Vars::Aimbot::General::AimTypeEnum::Legit:
 		{
 			auto vAngle = Math::CalcAngle(m_vEyePos, tTarget.m_vPos);
 
@@ -450,8 +506,13 @@ bool CAimbotMelee::Aim(const Vec3& vCurAngle, const Vec3& vToAngle, Vec3& vOut, 
 	case Vars::Aimbot::General::AimTypeEnum::Locking:
 		vOut = vToAngle;
 		break;
+	case Vars::Aimbot::General::AimTypeEnum::Legit:
+		vOut = vCurAngle;
+		bReturn = true;
+		break;
 	case Vars::Aimbot::General::AimTypeEnum::Smooth:
-		vOut = vCurAngle.LerpAngle(vToAngle, Vars::Aimbot::General::AssistStrength.Value / 100.f);
+	case Vars::Aimbot::General::AimTypeEnum::SmoothVelocity:
+		vOut = vCurAngle.LerpAngle(vToAngle, F::Aimbot.GetSmoothStrength(vCurAngle, vToAngle));
 		bReturn = true;
 		break;
 	case Vars::Aimbot::General::AimTypeEnum::Assistive:
@@ -459,7 +520,7 @@ bool CAimbotMelee::Aim(const Vec3& vCurAngle, const Vec3& vToAngle, Vec3& vOut, 
 		Vec3 vTargetDelta = vToAngle.DeltaAngle(G::LastUserCmd->viewangles);
 		float flMouseDelta = vMouseDelta.Length2DSqr(), flTargetDelta = vTargetDelta.Length2DSqr();
 		vTargetDelta = vTargetDelta.Normalized() * sqrtf(std::min(flMouseDelta, flTargetDelta));
-		vOut = vCurAngle - vMouseDelta + vMouseDelta.LerpAngle(vTargetDelta, Vars::Aimbot::General::AssistStrength.Value / 100.f);
+		vOut = vCurAngle - vMouseDelta + vMouseDelta.LerpAngle(vTargetDelta, F::Aimbot.GetSmoothStrength(vCurAngle, vToAngle));
 		bReturn = true;
 		break;
 	}
@@ -480,6 +541,7 @@ void CAimbotMelee::Aim(CUserCmd* pCmd, Vec3& vAngles, int iMethod)
 			break;
 		[[fallthrough]];
 	case Vars::Aimbot::General::AimTypeEnum::Smooth:
+		case Vars::Aimbot::General::AimTypeEnum::SmoothVelocity:
 	case Vars::Aimbot::General::AimTypeEnum::Assistive:
 		pCmd->viewangles = vAngles;
 		I::EngineClient->SetViewAngles(vAngles);
@@ -492,6 +554,22 @@ void CAimbotMelee::Aim(CUserCmd* pCmd, Vec3& vAngles, int iMethod)
 			G::PSilentAngles = true;
 		}
 		break;
+	case Vars::Aimbot::General::AimTypeEnum::Legit:
+	{
+		auto pLocal = H::Entities.GetLocal();
+		if (pLocal && G::AimPoint.m_iTickCount == I::GlobalVars->tickcount)
+		{
+			F::BotUtils.LookLegit(pLocal, pCmd, G::AimPoint.m_vOrigin, false);
+			vAngles = pCmd->viewangles;
+			if (G::AimbotSteering)
+				return;
+			Vec3 vOldView = I::EngineClient->GetViewAngles();
+			Vec3 vDelta = vAngles.DeltaAngle(vOldView);
+			if (std::fabs(vDelta.x) > 0.01f || std::fabs(vDelta.y) > 0.01f || std::fabs(vDelta.z) > 0.01f)
+				G::AimbotSteering = true;
+		}
+		break;
+	}
 	case Vars::Aimbot::General::AimTypeEnum::Locking:
 		SDK::FixMovement(pCmd, vAngles);
 		pCmd->viewangles = vAngles;
@@ -563,6 +641,55 @@ static inline void DrawVisuals(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserC
 	}
 }
 
+std::pair<float, float> CAimbotMelee::GetClosestRecord(std::vector<TickRecord*> vRecords)
+{
+	float flSimTime = -1.f;
+	float flMaxDist = 300.f;
+	TickRecord* pBest = nullptr;
+	for (auto pRecord : vRecords)
+	{
+		float flDist = pRecord->m_vOrigin.DistTo(m_vEyePos);
+		if (flDist < flMaxDist)
+		{
+			flMaxDist = flDist;
+			flSimTime = pRecord->m_flSimTime;
+		}
+	}
+	return { flMaxDist, flSimTime };
+}
+
+void CAimbotMelee::BacktrackToCrosshair(CTFPlayer* pLocal, CUserCmd* pCmd)
+{
+	float flBestSimTime = -1.f;
+	float flMaxDist = 300.f;
+	m_vEyePos = pLocal->GetShootPos();
+	for (auto pEntity : H::Entities.GetGroup(EntityEnum::PlayerEnemy))
+	{
+		if (!pEntity->As<CTFPlayer>()->IsAlive()
+			|| pEntity->As<CTFPlayer>()->IsAGhost()
+			|| pEntity->As<CTFPlayer>()->IsInvulnerable()
+			|| pEntity->GetAbsOrigin().DistTo(m_vEyePos) > 1000.f)
+			continue;
+
+		std::vector<TickRecord*> vRecords;
+		if (!F::Backtrack.GetRecords(pEntity, vRecords))
+			continue;
+
+		vRecords = F::Backtrack.GetValidRecords(vRecords);
+		auto tInfo = GetClosestRecord(vRecords);
+		if (tInfo.first < flMaxDist)
+		{
+			flBestSimTime = tInfo.second;
+			flMaxDist = tInfo.first;
+		}
+	}
+
+	if (flBestSimTime == -1.f)
+		return;
+
+	pCmd->tick_count = TIME_TO_TICKS(flBestSimTime + F::Backtrack.GetFakeInterp());
+}
+
 void CAimbotMelee::Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd)
 {
 	static int iStaticAimType = Vars::Aimbot::General::AimType.Value;
@@ -579,10 +706,13 @@ void CAimbotMelee::Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd
 		|| !F::AimbotGlobal.ShouldAim() && pWeapon->m_flSmackTime() < 0.f)
 		return;
 
+	m_mRecordMap.clear(); m_mPaths.clear();
+	m_iDoubletapTicks = F::Ticks.GetTicks(pWeapon);
+
 	if (RunSapper(pLocal, pWeapon, pCmd))
 		return;
 
-	auto vTargets = F::AimbotGlobal.ManageTargets(GetTargets, pLocal, pWeapon, Vars::Aimbot::General::TargetSelectionEnum::Distance);
+	auto vTargets = F::AimbotGlobal.ManageTargets(GetTargets, pLocal, pWeapon, Vars::Aimbot::General::TargetSelectionMelee.Value);
 	if (vTargets.empty())
 		return;
 
@@ -597,6 +727,7 @@ void CAimbotMelee::Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd
 		if (iResult == 2)
 		{
 			G::AimTarget = { tTarget.m_pEntity->entindex(), I::GlobalVars->tickcount, 0 };
+			G::AimPoint = { tTarget.m_vPos, I::GlobalVars->tickcount };
 			Aim(pCmd, tTarget.m_vAngleTo);
 			break;
 		}
@@ -609,11 +740,12 @@ void CAimbotMelee::Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd
 				F::Ticks.m_bDoubletap = true;
 		}
 
-		G::Attacking = SDK::IsAttacking(pLocal, pWeapon, pCmd, true);
+		if (G::Attacking = SDK::IsAttacking(pLocal, pWeapon, pCmd, true))
+			F::Aimbot.m_eRanType = EWeaponType::MELEE;
 		if (G::Attacking == 1)
 		{
 			if (tTarget.m_bBacktrack)
-				pCmd->tick_count = TIME_TO_TICKS(tTarget.m_pRecord->m_flSimTime) + TIME_TO_TICKS(F::Backtrack.GetFakeInterp());
+				pCmd->tick_count = TIME_TO_TICKS(tTarget.m_pRecord->m_flSimTime + F::Backtrack.GetFakeInterp());
 			// bug: fast old records seem to be progressively more unreliable ?
 		}
 		else
@@ -635,6 +767,7 @@ static inline int GetAttachment(CBaseObject* pBuilding, int i)
 		iAttachment = 3; // idk why this is needed
 	return iAttachment;
 }
+
 bool CAimbotMelee::FindNearestBuildPoint(CBaseObject* pBuilding, CTFPlayer* pLocal, Vec3& vPoint)
 {
 	bool bFoundPoint = false;
@@ -694,7 +827,7 @@ bool CAimbotMelee::RunSapper(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd
 
 		vTargets.emplace_back(pBuilding, TargetEnum::Unknown, vPoint, vAngleTo, flFOVTo, flDistTo);
 	}
-	F::AimbotGlobal.SortTargetsPre(vTargets, Vars::Aimbot::General::TargetSelectionEnum::Distance);
+	F::AimbotGlobal.SortTargetsPre(vTargets, Vars::Aimbot::General::TargetSelectionMeleeEnum::Distance);
 	if (vTargets.empty())
 		return true;
 
@@ -707,7 +840,7 @@ bool CAimbotMelee::RunSapper(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd
 		bShouldAim = pCmd->buttons & IN_ATTACK;
 	if (Vars::Aimbot::General::AimType.Value == Vars::Aimbot::General::AimTypeEnum::Silent)
 		bShouldAim &= !I::ClientState->chokedcommands && F::Ticks.CanChoke(true);
-		
+
 	if (bShouldAim)
 	{
 		G::AimTarget = { tTarget.m_pEntity->entindex(), I::GlobalVars->tickcount };
