@@ -175,6 +175,7 @@ void CMenu::MenuAimbot(int iTab)
 					FToggle(Vars::Aimbot::General::FOVCircle, FToggleEnum::Right);
 					FToggle(Vars::Aimbot::General::LeadAndRestrict, FToggleEnum::Left);
 					FToggle(Vars::Aimbot::General::NoSpread, FToggleEnum::Right);
+					FToggle(Vars::Aimbot::General::PrioritizeMedic, FToggleEnum::Left);
 				} EndSection();
 				if (Vars::Debug::Options.Value)
 				{
