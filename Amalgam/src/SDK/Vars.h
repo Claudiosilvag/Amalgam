@@ -273,6 +273,7 @@ NAMESPACE_BEGIN(Vars)
 			CVar(FOVCircle, "FOV Circle", true, VISUAL);
 			CVar(LeadAndRestrict, "Lead and restrict", false, VISUAL);
 			CVar(NoSpread, "No spread", false);
+			CVar(PrioritizeMedic, "Prioritize medic", false);
 
 			CVarEnum(AimHoldsFire, "Aim holds fire", 2, NOSAVE | DEBUGVAR, nullptr,
 				VA_LIST("False", "Minigun only", "Always"),

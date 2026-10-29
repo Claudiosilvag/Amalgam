@@ -33,6 +33,10 @@ void CAimbotGlobal::SortTargetsPre(std::vector<Target_t>& vTargets, int iMethod)
 		});
 		break;
 	}
+
+	// keep medics ahead so they aren't cut off by max targets
+	if (Vars::Aimbot::General::PrioritizeMedic.Value)
+		std::stable_partition(vTargets.begin(), vTargets.end(), [&](const Target_t& tTarget) { return IsPrioritizedMedic(tTarget); });
 }
 
 void CAimbotGlobal::SortTargetsPost(std::vector<Target_t>& vTargets, int iMethod)
@@ -49,8 +53,20 @@ void CAimbotGlobal::SortTargetsPost(std::vector<Target_t>& vTargets, int iMethod
 
 	std::sort(vTargets.begin(), vTargets.end(), [&](const Target_t& a, const Target_t& b) -> bool
 	{
-		return a.m_nPriority > b.m_nPriority;
+		if (a.m_nPriority != b.m_nPriority)
+			return a.m_nPriority > b.m_nPriority;
+		return IsPrioritizedMedic(a) && !IsPrioritizedMedic(b);
 	});
+}
+
+bool CAimbotGlobal::IsPrioritizedMedic(const Target_t& tTarget)
+{
+	if (!Vars::Aimbot::General::PrioritizeMedic.Value || tTarget.m_iTargetType != TargetEnum::Player)
+		return false;
+
+	auto pLocal = H::Entities.GetLocal();
+	auto pPlayer = tTarget.m_pEntity->As<CTFPlayer>();
+	return pPlayer->m_iClass() == TF_CLASS_MEDIC && (!pLocal || pPlayer->m_iTeamNum() != pLocal->m_iTeamNum());
 }
 
 float CAimbotGlobal::GetAimFOV()

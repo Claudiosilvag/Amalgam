@@ -32,6 +32,7 @@ public:
 		int iMethod = Vars::Aimbot::General::TargetSelection.Value, int iMaxTargets = Vars::Aimbot::General::MaxTargets.Value);
 	void SortTargetsPre(std::vector<Target_t>& vTargets, int iMethod);
 	void SortTargetsPost(std::vector<Target_t>& vTargets, int iMethod);
+	bool IsPrioritizedMedic(const Target_t& tTarget);
 
 	float GetAimFOV();
 	bool EntityCenterInFOV(CBaseEntity* pTarget, const Vec3& vLocalPos, const Vec3& vLocalAngles, float& flFOVTo, Vec3& vPos, Vec3& vAngleTo);
